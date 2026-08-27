@@ -12,7 +12,7 @@ const projects: Project[] = [
     name: "BetaScope",
     description:
       "Upload a climbing video and see pose tracking, hold detection, and biomechanical force analysis — all computed in your browser.",
-    href: "/betascope/",
+    href: "betascope/",
     status: "in progress",
   },
 ];

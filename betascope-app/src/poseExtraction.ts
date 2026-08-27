@@ -17,8 +17,11 @@ export class UnsupportedVideoError extends Error {
 
 // Self-hosted (see public/wasm, public/models) rather than CDN — keeps the
 // live site working without depending on a third party's CDN uptime.
-const WASM_BASE = "/wasm";
-const MODEL_PATH = "/models/pose_landmarker_full.task";
+// BASE_URL is resolved relative to wherever this page actually gets
+// deployed (e.g. /betascope/ under a GitHub Pages project subpath), so
+// these must not be hardcoded as absolute root paths.
+const WASM_BASE = `${import.meta.env.BASE_URL}wasm`;
+const MODEL_PATH = `${import.meta.env.BASE_URL}models/pose_landmarker_full.task`;
 
 /**
  * Loads a video File into a hidden <video> element and waits for it to be

@@ -8,7 +8,7 @@
 </head>
 <body>
   <main>
-    <a class="back" href="/">&larr; projects</a>
+    <a class="back" href="../">&larr; projects</a>
     <h1>BetaScope</h1>
     <p class="tagline">Upload a climbing video. Everything below runs in your browser — nothing is uploaded anywhere.</p>
 
@@ -25,6 +25,7 @@
     <div id="result" class="result" hidden>
       <canvas id="preview-canvas" class="preview-canvas"></canvas>
       <button id="download-json" class="download-btn" hidden>Download pose_data.json</button>
+      <button id="download-video" class="download-btn" hidden>Download video with overlay</button>
     </div>
 
     <video id="preview-video" muted playsinline preload="auto" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;"></video>

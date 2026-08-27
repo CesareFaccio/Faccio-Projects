@@ -23,8 +23,26 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - run: npm run build
+          cache-dependency-path: |
+            package-lock.json
+            betascope-app/package-lock.json
+
+      - name: Build root site
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build betascope-app
+        run: |
+          cd betascope-app
+          npm ci
+          npm run build
+
+      - name: Merge betascope-app into root build
+        run: |
+          mkdir -p dist/betascope
+          cp -r betascope-app/dist/. dist/betascope/
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
