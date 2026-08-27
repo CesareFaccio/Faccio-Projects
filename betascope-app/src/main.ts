@@ -1,6 +1,8 @@
 import { extractPose, UnsupportedVideoError } from "./poseExtraction";
+import { decodeMp4Frames } from "./webcodecsDecode";
 import { CONNECTIONS } from "./types";
 import type { PoseData, FrameEntry } from "./types";
+import type { DemuxedVideo } from "./mp4Demux";
 
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
 const dropzone = document.getElementById("dropzone") as HTMLDivElement;
@@ -12,7 +14,6 @@ const canvas = document.getElementById("preview-canvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const downloadJsonBtn = document.getElementById("download-json") as HTMLButtonElement;
 const downloadVideoBtn = document.getElementById("download-video") as HTMLButtonElement;
-const previewVideo = document.getElementById("preview-video") as HTMLVideoElement;
 
 // Matches VISIBILITY_THRESHOLD in reconstruct_video.py / reconstruct_plus.py —
 // low-confidence landmarks (occluded limbs, edge-of-frame, etc.) are skipped
@@ -25,8 +26,27 @@ let currentPoseData: PoseData | null = null;
 let playbackRafId: number | null = null;
 let isBusy = false; // extracting or recording — ignore new drops meanwhile
 
+// Which extraction backend produced currentPoseData, and the handle needed
+// to redraw frames for playback/export from that same backend:
+//  - "video-element": activeVideoEl is a real <video>, already loaded.
+//  - "webcodecs": currentDemuxed decodes straight from the original file —
+//    no <video> element or re-encoded copy involved anywhere in this path.
+let currentBackend: "video-element" | "webcodecs" | null = null;
+let activeVideoEl: HTMLVideoElement | null = null;
+let currentDemuxed: DemuxedVideo | null = null;
+let playbackAbortController: AbortController | null = null;
+
 function setStatus(text: string) {
   statusEl.textContent = text;
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function frameAtTime(t: number): FrameEntry | null {
@@ -39,10 +59,8 @@ function frameAtTime(t: number): FrameEntry | null {
   return currentPoseData.landmarks[idx] ?? null;
 }
 
-/** Draws the video's current frame plus the pose overlay for that instant onto the canvas. */
-function drawCurrentFrame() {
-  ctx.drawImage(previewVideo, 0, 0, canvas.width, canvas.height);
-  const entry = frameAtTime(previewVideo.currentTime);
+/** Draws the pose overlay for one frame onto the canvas — assumes the video frame itself is already drawn. */
+function drawOverlayForFrame(entry: FrameEntry | null) {
   if (!entry || !entry.detected) return;
 
   const visible = entry.landmarks.map((lm) => lm.visibility >= VISIBILITY_THRESHOLD);
@@ -66,20 +84,57 @@ function drawCurrentFrame() {
   });
 }
 
+/** video-element backend only: draws the video's current frame plus its overlay onto the canvas. */
+function drawCurrentFrame() {
+  if (!activeVideoEl) return;
+  ctx.drawImage(activeVideoEl, 0, 0, canvas.width, canvas.height);
+  drawOverlayForFrame(frameAtTime(activeVideoEl.currentTime));
+}
+
 function loopTick() {
   drawCurrentFrame();
   playbackRafId = requestAnimationFrame(loopTick);
 }
 
+/**
+ * webcodecs backend only: there's no <video> element to .play(), so looping
+ * playback is implemented by repeatedly re-decoding the (already-parsed,
+ * cheap-to-redecode) original file, pacing frames to real time. Each frame
+ * comes with an exact index, so no nearest-time lookup is needed — unlike
+ * the video-element path's frameAtTime().
+ */
+async function runWebCodecsPlaybackLoop(demuxed: DemuxedVideo, signal: AbortSignal) {
+  while (!signal.aborted) {
+    try {
+      await decodeMp4Frames(demuxed, {
+        realtime: true,
+        signal,
+        onFrame: (sourceCanvas, index) => {
+          ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+          drawOverlayForFrame(currentPoseData?.landmarks[index] ?? null);
+        },
+      });
+    } catch (err) {
+      if (!signal.aborted) console.error("Playback loop error:", err);
+      break;
+    }
+  }
+}
+
 function startLoopPlayback() {
   stopLoopPlayback();
-  previewVideo.loop = true;
-  previewVideo.currentTime = 0;
-  previewVideo.play().catch(() => {
-    // Autoplay can be blocked in some contexts; the still frame from the
-    // last progress tick stays visible, which is a fine fallback.
-  });
-  playbackRafId = requestAnimationFrame(loopTick);
+  if (currentBackend === "webcodecs" && currentDemuxed) {
+    playbackAbortController = new AbortController();
+    void runWebCodecsPlaybackLoop(currentDemuxed, playbackAbortController.signal);
+  } else if (activeVideoEl) {
+    activeVideoEl.loop = true;
+    activeVideoEl.currentTime = 0;
+    activeVideoEl.play().catch(() => {
+      // Autoplay can be blocked in some contexts; the still frame from the
+      // last progress tick stays visible, which is a fine fallback.
+    });
+    playbackRafId = requestAnimationFrame(loopTick);
+  }
 }
 
 function stopLoopPlayback() {
@@ -87,7 +142,11 @@ function stopLoopPlayback() {
     cancelAnimationFrame(playbackRafId);
     playbackRafId = null;
   }
-  previewVideo.pause();
+  if (playbackAbortController) {
+    playbackAbortController.abort();
+    playbackAbortController = null;
+  }
+  activeVideoEl?.pause();
 }
 
 async function handleFile(file: File) {
@@ -95,6 +154,9 @@ async function handleFile(file: File) {
   isBusy = true;
   stopLoopPlayback();
   currentPoseData = null;
+  currentBackend = null;
+  activeVideoEl = null;
+  currentDemuxed = null;
 
   resultEl.hidden = true;
   progressWrap.hidden = false;
@@ -103,21 +165,12 @@ async function handleFile(file: File) {
   downloadVideoBtn.hidden = true;
   downloadVideoBtn.disabled = false;
   downloadVideoBtn.textContent = DOWNLOAD_VIDEO_DEFAULT_LABEL;
-
-  previewVideo.src = URL.createObjectURL(file);
-  await new Promise<void>((resolve) => {
-    if (previewVideo.readyState >= 1) {
-      resolve();
-      return;
-    }
-    previewVideo.addEventListener("loadedmetadata", () => resolve(), { once: true });
-    previewVideo.load();
-  });
+  setStatus("");
 
   const startedAt = performance.now();
 
   try {
-    const data = await extractPose(file, (p) => {
+    const result = await extractPose(file, (p) => {
       if (p.phase === "loading-model") setStatus("Loading pose model…");
       else if (p.phase === "loading-video") setStatus("Loading video…");
       else if (p.phase === "estimating-fps") setStatus("Reading video frame rate…");
@@ -130,7 +183,11 @@ async function handleFile(file: File) {
       }
     });
 
+    const data = result.data;
     currentPoseData = data;
+    currentBackend = result.backend;
+    activeVideoEl = result.videoElement ?? null;
+    currentDemuxed = result.demuxed ?? null;
     (window as any).__betascopePoseData = data; // debugging convenience
 
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
@@ -144,9 +201,11 @@ async function handleFile(file: File) {
     downloadJsonBtn.hidden = false;
     downloadVideoBtn.hidden = false;
     progressBar.style.width = "100%";
+    const backendNote =
+      result.backend === "webcodecs" ? " · decoded directly from the original file (no re-encoding)" : "";
     setStatus(
       `Processed ${data.landmarks.length} frames in ${elapsed}s — ${detectionRate}% detection rate ` +
-        `(${data.video.width}x${data.video.height} @ ${data.video.fps.toFixed(2)}fps)`
+        `(${data.video.width}x${data.video.height} @ ${data.video.fps.toFixed(2)}fps)${backendNote}`
     );
 
     startLoopPlayback();
@@ -166,13 +225,98 @@ async function handleFile(file: File) {
 downloadJsonBtn.addEventListener("click", () => {
   if (!currentPoseData) return;
   const blob = new Blob([JSON.stringify(currentPoseData, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "pose_data.json";
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(blob, "pose_data.json");
 });
+
+async function recordOverlayVideoOnce(mimeType: string): Promise<Blob> {
+  if (currentBackend === "webcodecs" && currentDemuxed) {
+    // Manual-capture mode (0 = no automatic sampling): decode isn't paced
+    // to real time here, so we push exactly one frame per decoded frame
+    // via track.requestFrame(). Testing found this needs a real pause
+    // between calls — pushing frames back-to-back with no yield starves
+    // the encoder and produces a near-empty recording (the same failure
+    // signature the automatic-sampling path below can also hit under
+    // load — see the retry wrapper in downloadOverlayVideo), so this path
+    // is deliberately paced rather than run flat out.
+    const stream: MediaStream = (canvas as any).captureStream(0);
+    const track = stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void };
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+    const chunks: BlobPart[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    const recordingStopped = new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+    });
+
+    recorder.start();
+    const totalFrames = currentPoseData!.landmarks.length;
+    await decodeMp4Frames(currentDemuxed, {
+      onFrame: async (sourceCanvas, index) => {
+        ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+        drawOverlayForFrame(currentPoseData!.landmarks[index] ?? null);
+        track.requestFrame?.();
+        const pct = Math.round(((index + 1) / totalFrames) * 100);
+        downloadVideoBtn.textContent = `Recording overlay video… ${pct}%`;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      },
+    });
+    recorder.stop();
+    await recordingStopped;
+    return new Blob(chunks, { type: mimeType });
+  }
+
+  if (activeVideoEl) {
+    // Automatic-capture mode, sampled at the video's own fps: the video
+    // plays through in real time below, which is exactly the steady
+    // cadence automatic sampling is designed for.
+    const fps = currentPoseData!.video.fps;
+    const stream: MediaStream = (canvas as any).captureStream(fps);
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+    const chunks: BlobPart[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    const recordingStopped = new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+    });
+
+    const video = activeVideoEl;
+    video.loop = false;
+    video.currentTime = 0;
+    await new Promise<void>((resolve) => {
+      video.addEventListener("seeked", () => resolve(), { once: true });
+    });
+
+    recorder.start();
+    await new Promise<void>((resolve) => {
+      let rafId = 0;
+      const tick = () => {
+        drawCurrentFrame();
+        rafId = requestAnimationFrame(tick);
+      };
+      const onTimeUpdate = () => {
+        if (!video.duration) return;
+        const pct = Math.round((video.currentTime / video.duration) * 100);
+        downloadVideoBtn.textContent = `Recording overlay video… ${pct}%`;
+      };
+      const onEnded = () => {
+        cancelAnimationFrame(rafId);
+        video.removeEventListener("timeupdate", onTimeUpdate);
+        resolve();
+      };
+      video.addEventListener("ended", onEnded, { once: true });
+      video.addEventListener("timeupdate", onTimeUpdate);
+      rafId = requestAnimationFrame(tick);
+      video.play();
+    });
+    recorder.stop();
+    await recordingStopped;
+    return new Blob(chunks, { type: mimeType });
+  }
+
+  throw new Error("No playable source available to record from.");
+}
 
 async function downloadOverlayVideo() {
   if (!currentPoseData || isBusy) return;
@@ -187,63 +331,44 @@ async function downloadOverlayVideo() {
       return;
     }
 
-    const fps = currentPoseData.video.fps;
-    const stream: MediaStream = (canvas as any).captureStream(fps);
-    // vp8 first: some Chromium builds' software vp9 encoder silently
-    // produces a near-empty recording when fed a canvas stream sourced
-    // from video content (observed in headless/sandboxed testing) even
-    // though isTypeSupported() reports vp9 as fine. vp8 has proven
-    // reliable for this canvas-recording use case, so it's preferred over
-    // vp9's better compression here.
     const mimeCandidates = ["video/webm;codecs=vp8", "video/webm;codecs=vp9", "video/webm"];
     const mimeType = mimeCandidates.find((m) => MediaRecorder.isTypeSupported?.(m)) ?? "video/webm";
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
-    const chunks: BlobPart[] = [];
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
-    const recordingStopped = new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve();
-    });
 
-    previewVideo.loop = false;
-    previewVideo.currentTime = 0;
-    await new Promise<void>((resolve) => {
-      previewVideo.addEventListener("seeked", () => resolve(), { once: true });
-    });
+    // captureStream()+MediaRecorder occasionally produces a near-empty
+    // recording under load (observed in testing on both the manual- and
+    // automatic-sampling paths) — a real timing race in the browser's
+    // capture pipeline, not something this code can prevent outright. A
+    // few-hundred-byte file is just a container header with no frames, so
+    // rather than risk silently handing over a corrupt download, validate
+    // the size and retry before giving up.
+    const MIN_VALID_BYTES = 2000;
+    const MAX_ATTEMPTS = 3;
+    let blob: Blob | null = null;
+    let lastError: unknown = null;
 
-    let rafId = 0;
-    const tick = () => {
-      drawCurrentFrame();
-      rafId = requestAnimationFrame(tick);
-    };
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        setStatus(`Recording came out empty — retrying (attempt ${attempt}/${MAX_ATTEMPTS})…`);
+      }
+      try {
+        const candidate = await recordOverlayVideoOnce(mimeType);
+        if (candidate.size >= MIN_VALID_BYTES) {
+          blob = candidate;
+          break;
+        }
+        lastError = new Error(`Recording produced only ${candidate.size} bytes.`);
+      } catch (err) {
+        lastError = err;
+      }
+    }
 
-    const onEnded = () => {
-      cancelAnimationFrame(rafId);
-      recorder.stop();
-    };
-    const onTimeUpdate = () => {
-      if (!previewVideo.duration) return;
-      const pct = Math.round((previewVideo.currentTime / previewVideo.duration) * 100);
-      downloadVideoBtn.textContent = `Recording overlay video… ${pct}%`;
-    };
-    previewVideo.addEventListener("ended", onEnded, { once: true });
-    previewVideo.addEventListener("timeupdate", onTimeUpdate);
+    if (!blob) {
+      setStatus("Couldn't record the overlay video after a few tries — please try again.");
+      console.error("downloadOverlayVideo: all attempts failed", lastError);
+      return;
+    }
 
-    recorder.start();
-    rafId = requestAnimationFrame(tick);
-    await previewVideo.play();
-
-    await recordingStopped;
-    previewVideo.removeEventListener("timeupdate", onTimeUpdate);
-
-    const blob = new Blob(chunks, { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "climbing_pose_overlay.webm";
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(blob, "climbing_pose_overlay.webm");
   } finally {
     downloadVideoBtn.textContent = DOWNLOAD_VIDEO_DEFAULT_LABEL;
     downloadJsonBtn.disabled = false;
