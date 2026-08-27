@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BetaScope</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <main>
+    <a class="back" href="/">&larr; projects</a>
+    <h1>BetaScope</h1>
+    <p class="tagline">Upload a climbing video. Everything below runs in your browser — nothing is uploaded anywhere.</p>
+
+    <div id="dropzone" class="dropzone">
+      <p>Click or drop a video file here</p>
+      <input id="file-input" type="file" accept="video/*" hidden />
+    </div>
+
+    <div id="progress-wrap" class="progress-wrap" hidden>
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+    <div id="status" class="status"></div>
+
+    <div id="result" class="result" hidden>
+      <canvas id="preview-canvas" class="preview-canvas"></canvas>
+      <button id="download-json" class="download-btn" hidden>Download pose_data.json</button>
+    </div>
+
+    <video id="preview-video" muted playsinline preload="auto" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;"></video>
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
