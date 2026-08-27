@@ -1,8 +1,6 @@
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { FrameEntry, PoseData } from "./types";
 import { LANDMARK_NAMES } from "./types";
-import { demuxMp4, UnsupportedContainerError, type DemuxedVideo } from "./mp4Demux";
-import { checkWebCodecsSupport, decodeMp4Frames } from "./webcodecsDecode";
 
 export interface ExtractionProgress {
   phase: "loading-model" | "loading-video" | "estimating-fps" | "extracting" | "done";
@@ -19,20 +17,7 @@ export class UnsupportedVideoError extends Error {
 
 export interface ExtractionResult {
   data: PoseData;
-  /**
-   * "webcodecs": frames were decoded straight from the original container
-   * (no re-encode, no browser <video> involved) via WebCodecs — this same
-   * demuxed handle drives playback/export too, so neither ever touches a
-   * re-encoded copy of the video.
-   * "video-element": the classic <video>+seek path — used whenever the
-   * browser can't decode this file's original codec via WebCodecs (e.g.
-   * HEVC on most non-Mac platforms) or the container isn't MP4/MOV. The
-   * video was already loaded into the returned element; reuse it for
-   * playback rather than reloading the file.
-   */
-  backend: "webcodecs" | "video-element";
-  videoElement?: HTMLVideoElement;
-  demuxed?: DemuxedVideo;
+  videoElement: HTMLVideoElement;
 }
 
 // Self-hosted (see public/wasm, public/models) rather than CDN — keeps the
@@ -42,6 +27,13 @@ export interface ExtractionResult {
 // these must not be hardcoded as absolute root paths.
 const WASM_BASE = `${import.meta.env.BASE_URL}wasm`;
 const MODEL_PATH = `${import.meta.env.BASE_URL}models/pose_landmarker_full.task`;
+
+// Shown up front (index.html) and reused in the error message below —
+// kept in one place so the two stay consistent.
+export const REQUIRED_FORMAT_NOTE =
+  'Works with H.264-encoded video (MP4/MOV). If this was recorded on an iPhone, check ' +
+  'Settings > Camera > Formats is set to "Most Compatible", not "High Efficiency" — HEVC video ' +
+  "can't be played by most browsers.";
 
 async function createLandmarker(vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>): Promise<PoseLandmarker> {
   const config = (delegate: "GPU" | "CPU") => ({
@@ -61,8 +53,8 @@ async function createLandmarker(vision: Awaited<ReturnType<typeof FilesetResolve
 /**
  * Loads a video File into a hidden <video> element and waits for it to be
  * ready to play. Rejects with UnsupportedVideoError if the browser can't
- * decode it (e.g. HEVC on non-Safari browsers, and on browsers/videos the
- * WebCodecs path above also can't handle).
+ * decode it — most commonly an HEVC (iPhone "High Efficiency") video, which
+ * most non-Safari browsers can't play at all.
  */
 function loadVideo(file: File): Promise<HTMLVideoElement> {
   return new Promise((resolve, reject) => {
@@ -80,9 +72,7 @@ function loadVideo(file: File): Promise<HTMLVideoElement> {
       cleanup();
       reject(
         new UnsupportedVideoError(
-          "This browser couldn't play that video. If it was recorded on an iPhone, " +
-            "try re-exporting or sharing it as an H.264 video (iOS: Settings > Camera > " +
-            'Formats > "Most Compatible") and upload that instead.'
+          `This browser couldn't play that video. ${REQUIRED_FORMAT_NOTE} Re-export or re-share it and upload that instead.`
         )
       );
     };
@@ -99,10 +89,9 @@ function loadVideo(file: File): Promise<HTMLVideoElement> {
 
 /**
  * Empirically measures the video's frame rate by playing it briefly and
- * timing real presented frames via requestVideoFrameCallback. Browsers don't
- * expose container fps directly, so this is the practical way to get it —
- * only needed for the <video>-element fallback path; the WebCodecs path
- * reads the container's true frame rate directly (see mp4Demux.ts).
+ * timing real presented frames via requestVideoFrameCallback. Browsers
+ * don't expose container fps directly, so this is the practical way to
+ * get it.
  */
 function estimateFps(video: HTMLVideoElement, sampleFrames = 20): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -173,74 +162,14 @@ function landmarksToFrameEntry(frame: number, timestampS: number, result: { land
   };
 }
 
-/**
- * Decodes the video straight from its original container via WebCodecs —
- * no <video> element, no re-encode step, ever. This is what closes the
- * accuracy gap against the Python reference pipeline: browsers can't play
- * HEVC (the default iPhone codec) in a <video> tag at all, so previously
- * every HEVC upload had to be re-encoded to a browser-playable format
- * first, and that re-encode measurably degrades pose landmark accuracy
- * (confirmed by isolating the effect: re-encoding alone, nothing else
- * different, shifted landmarks by ~15px on average vs. the original file).
- * Throws (falls back to extractPoseViaVideoElement) if the container isn't
- * MP4/MOV, or this browser can't decode its codec via WebCodecs.
- */
-async function extractPoseViaWebCodecs(
+export async function extractPose(
   file: File,
-  landmarker: PoseLandmarker,
   onProgress?: (p: ExtractionProgress) => void
 ): Promise<ExtractionResult> {
-  const demuxed = await demuxMp4(file);
-  const supported = await checkWebCodecsSupport(demuxed);
-  if (!supported) {
-    throw new UnsupportedContainerError("This browser can't decode this video's codec via WebCodecs.");
-  }
+  onProgress?.({ phase: "loading-model" });
+  const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
+  const landmarker = await createLandmarker(vision);
 
-  const totalFrames = demuxed.samples.length;
-  const frames: FrameEntry[] = [];
-  onProgress?.({ phase: "extracting", frame: 0, totalFrames });
-
-  let lastTimestampMs = -1;
-  await decodeMp4Frames(demuxed, {
-    onFrame: (canvas, index, timestampUs) => {
-      let timestampMs = Math.round(timestampUs / 1000);
-      // MediaPipe requires strictly increasing integer ms timestamps.
-      if (timestampMs <= lastTimestampMs) timestampMs = lastTimestampMs + 1;
-      lastTimestampMs = timestampMs;
-
-      const result = landmarker.detectForVideo(canvas, timestampMs);
-      frames.push(landmarksToFrameEntry(index, timestampUs / 1e6, result));
-
-      if (index % 5 === 0 || index === totalFrames - 1) {
-        onProgress?.({ phase: "extracting", frame: index + 1, totalFrames });
-      }
-    },
-  });
-
-  landmarker.close();
-
-  return {
-    data: {
-      video: {
-        path: file.name,
-        fps: demuxed.fps,
-        width: demuxed.displayWidth,
-        height: demuxed.displayHeight,
-        total_frames: totalFrames,
-      },
-      landmarks: frames,
-    },
-    backend: "webcodecs",
-    demuxed,
-  };
-}
-
-/** The original <video>+seek extraction path — kept as the universal fallback. */
-async function extractPoseViaVideoElement(
-  file: File,
-  landmarker: PoseLandmarker,
-  onProgress?: (p: ExtractionProgress) => void
-): Promise<ExtractionResult> {
   onProgress?.({ phase: "loading-video" });
   const video = await loadVideo(file);
 
@@ -269,37 +198,13 @@ async function extractPoseViaVideoElement(
   }
 
   landmarker.close();
+  onProgress?.({ phase: "done" });
 
   return {
     data: {
       video: { path: file.name, fps, width, height, total_frames: totalFrames },
       landmarks: frames,
     },
-    backend: "video-element",
     videoElement: video,
   };
-}
-
-export async function extractPose(
-  file: File,
-  onProgress?: (p: ExtractionProgress) => void
-): Promise<ExtractionResult> {
-  onProgress?.({ phase: "loading-model" });
-  const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
-  const landmarker = await createLandmarker(vision);
-
-  try {
-    return await extractPoseViaWebCodecs(file, landmarker, onProgress);
-  } catch (webCodecsErr) {
-    // Any failure here (unsupported container, unsupported codec/config on
-    // this browser, a mid-decode error) falls back to the classic
-    // <video>+seek path, which covers anything the browser's native video
-    // pipeline can already play. A genuinely unplayable file (e.g. HEVC
-    // that also can't be decoded via WebCodecs on this browser/platform)
-    // surfaces as UnsupportedVideoError from that path, same as before
-    // this feature existed — this only ever improves accuracy, never
-    // removes support for a file that used to work.
-    console.warn("WebCodecs extraction unavailable, falling back to <video>-based extraction:", webCodecsErr);
-    return extractPoseViaVideoElement(file, landmarker, onProgress);
-  }
 }

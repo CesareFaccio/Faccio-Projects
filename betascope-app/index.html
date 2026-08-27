@@ -12,14 +12,26 @@
     <h1>BetaScope</h1>
     <p class="tagline">Upload a climbing video. Everything below runs in your browser — nothing is uploaded anywhere.</p>
 
+    <div id="format-note" class="support-badge">
+      Works with H.264-encoded video (MP4/MOV). If this was recorded on an iPhone, check
+      Settings &gt; Camera &gt; Formats is set to "Most Compatible", not "High Efficiency" —
+      HEVC video can't be played by most browsers.
+    </div>
+
     <div id="dropzone" class="dropzone">
       <p>Click or drop a video file here</p>
       <input id="file-input" type="file" accept="video/*" hidden />
     </div>
 
+    <ol id="pipeline-steps" class="pipeline-steps" hidden>
+      <li id="step-model" data-step="model"><span class="step-icon"></span>Loading pose model</li>
+      <li id="step-extract" data-step="extract"><span class="step-icon"></span>Extracting poses</li>
+    </ol>
+
     <div id="progress-wrap" class="progress-wrap" hidden>
       <div id="progress-bar" class="progress-bar"></div>
     </div>
+    <div id="error-note" class="backend-note error" hidden></div>
     <div id="status" class="status"></div>
 
     <div id="result" class="result" hidden>

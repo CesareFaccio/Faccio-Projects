@@ -13,7 +13,6 @@
     "vite": "^5.4.0"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "^0.10.17",
-    "mp4box": "^2.4.1"
+    "@mediapipe/tasks-vision": "^0.10.17"
   }
 }
