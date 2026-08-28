@@ -30,7 +30,7 @@ export interface AnalysisOptions {
 }
 
 export const DEFAULT_ANALYSIS_OPTIONS: AnalysisOptions = {
-  velocityThreshold: 0.005,
+  velocityThreshold: 0.002,
   minHoldFrames: 85,
   smoothWindow: 4,
   maxGapFrames: 5,
