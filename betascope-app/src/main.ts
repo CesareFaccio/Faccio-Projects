@@ -1,6 +1,8 @@
 import { extractPose, UnsupportedVideoError } from "./poseExtraction";
-import { CONNECTIONS } from "./types";
 import type { PoseData, FrameEntry } from "./types";
+import { computeAnalysis } from "./analysis";
+import type { AnalysisResult } from "./analysis";
+import { renderOverlay } from "./render";
 
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
 const dropzone = document.getElementById("dropzone") as HTMLDivElement;
@@ -17,14 +19,10 @@ const ctx = canvas.getContext("2d")!;
 const downloadJsonBtn = document.getElementById("download-json") as HTMLButtonElement;
 const downloadVideoBtn = document.getElementById("download-video") as HTMLButtonElement;
 
-// Matches VISIBILITY_THRESHOLD in reconstruct_video.py / reconstruct_plus.py —
-// low-confidence landmarks (occluded limbs, edge-of-frame, etc.) are skipped
-// rather than drawn, which is what keeps the overlay legible instead of a
-// tangle of low-confidence guesses.
-const VISIBILITY_THRESHOLD = 0.5;
 const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
 
 let currentPoseData: PoseData | null = null;
+let currentAnalysis: AnalysisResult | null = null;
 let activeVideoEl: HTMLVideoElement | null = null;
 let playbackRafId: number | null = null;
 let isBusy = false; // extracting or recording — ignore new drops meanwhile
@@ -69,29 +67,9 @@ function frameAtTime(t: number): FrameEntry | null {
   return currentPoseData.landmarks[idx] ?? null;
 }
 
-/** Draws the pose overlay for one frame onto the canvas — assumes the video frame itself is already drawn. */
+/** Draws the pose_overlay.mp4-equivalent overlay (holds, skeleton, CoM, frame stamp) — assumes the video frame itself is already drawn. */
 function drawOverlayForFrame(entry: FrameEntry | null) {
-  if (!entry || !entry.detected) return;
-
-  const visible = entry.landmarks.map((lm) => lm.visibility >= VISIBILITY_THRESHOLD);
-
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "#5eead4";
-  for (const [a, b] of CONNECTIONS) {
-    if (!visible[a] || !visible[b]) continue;
-    const la = entry.landmarks[a], lb = entry.landmarks[b];
-    ctx.beginPath();
-    ctx.moveTo(la.x * canvas.width, la.y * canvas.height);
-    ctx.lineTo(lb.x * canvas.width, lb.y * canvas.height);
-    ctx.stroke();
-  }
-  ctx.fillStyle = "#ffea00";
-  entry.landmarks.forEach((lm, i) => {
-    if (!visible[i]) return;
-    ctx.beginPath();
-    ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 4, 0, 2 * Math.PI);
-    ctx.fill();
-  });
+  renderOverlay(ctx, canvas, entry, currentAnalysis);
 }
 
 /** Draws the video's current frame plus its overlay onto the canvas. */
@@ -131,6 +109,7 @@ async function handleFile(file: File) {
   isBusy = true;
   stopLoopPlayback();
   currentPoseData = null;
+  currentAnalysis = null;
   activeVideoEl = null;
 
   resultEl.hidden = true;
@@ -174,8 +153,11 @@ async function handleFile(file: File) {
 
     const data = result.data;
     currentPoseData = data;
+    currentAnalysis = computeAnalysis(data);
     activeVideoEl = result.videoElement;
     (window as any).__betascopePoseData = data; // debugging convenience
+    (window as any).__betascopeAnalysis = currentAnalysis; // debugging convenience
+    (window as any).__betascopeVideoEl = activeVideoEl; // debugging convenience
 
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
     const detectedCount = data.landmarks.filter((f) => f.detected).length;
