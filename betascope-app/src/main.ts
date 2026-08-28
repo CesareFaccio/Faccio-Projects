@@ -2,7 +2,11 @@ import { extractPose, UnsupportedVideoError } from "./poseExtraction";
 import type { PoseData, FrameEntry } from "./types";
 import { computeAnalysis } from "./analysis";
 import type { AnalysisResult } from "./analysis";
-import { renderOverlay } from "./render";
+import { computeWeightDistribution } from "./forces";
+import { computeMotion } from "./motion";
+import type { MotionFrameEntry } from "./motion";
+import { buildSmoothedWeightByFrame, renderPlusOverlay } from "./plusRender";
+import type { SmoothedWeightFrame } from "./plusRender";
 
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
 const dropzone = document.getElementById("dropzone") as HTMLDivElement;
@@ -23,6 +27,10 @@ const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
 
 let currentPoseData: PoseData | null = null;
 let currentAnalysis: AnalysisResult | null = null;
+let currentWeightByFrame: Map<number, SmoothedWeightFrame> | null = null;
+let currentMotionByFrame: Map<number, MotionFrameEntry> | null = null;
+let videoWidth = 0;
+let videoHeight = 0;
 let activeVideoEl: HTMLVideoElement | null = null;
 let playbackRafId: number | null = null;
 let isBusy = false; // extracting or recording — ignore new drops meanwhile
@@ -67,15 +75,15 @@ function frameAtTime(t: number): FrameEntry | null {
   return currentPoseData.landmarks[idx] ?? null;
 }
 
-/** Draws the pose_overlay.mp4-equivalent overlay (holds, skeleton, CoM, frame stamp) — assumes the video frame itself is already drawn. */
+/** Draws the climbing_plus.mp4-equivalent dual-panel overlay (left: weight/motion schematic, right: skeleton + forces + CoM + holds) — assumes the video frame itself is already drawn into the canvas's right half. */
 function drawOverlayForFrame(entry: FrameEntry | null) {
-  renderOverlay(ctx, canvas, entry, currentAnalysis);
+  renderPlusOverlay(ctx, entry, currentAnalysis, currentWeightByFrame, currentMotionByFrame, videoWidth, videoHeight);
 }
 
-/** Draws the video's current frame plus its overlay onto the canvas. */
+/** Draws the video's current frame (into the right half only — the left half is the synthetic schematic) plus the overlay onto the canvas. */
 function drawCurrentFrame() {
   if (!activeVideoEl) return;
-  ctx.drawImage(activeVideoEl, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(activeVideoEl, videoWidth, 0, videoWidth, videoHeight);
   drawOverlayForFrame(frameAtTime(activeVideoEl.currentTime));
 }
 
@@ -110,6 +118,8 @@ async function handleFile(file: File) {
   stopLoopPlayback();
   currentPoseData = null;
   currentAnalysis = null;
+  currentWeightByFrame = null;
+  currentMotionByFrame = null;
   activeVideoEl = null;
 
   resultEl.hidden = true;
@@ -154,16 +164,27 @@ async function handleFile(file: File) {
     const data = result.data;
     currentPoseData = data;
     currentAnalysis = computeAnalysis(data);
+    const weight = computeWeightDistribution(data, currentAnalysis);
+    currentWeightByFrame = buildSmoothedWeightByFrame(weight);
+    const motionArr = computeMotion(currentAnalysis.com, data.video.fps);
+    currentMotionByFrame = motionArr
+      ? new Map(motionArr.filter((m) => m.speed_px_s !== null).map((m) => [m.frame, m]))
+      : null;
     activeVideoEl = result.videoElement;
     (window as any).__betascopePoseData = data; // debugging convenience
     (window as any).__betascopeAnalysis = currentAnalysis; // debugging convenience
+    (window as any).__betascopeWeight = weight; // debugging convenience
+    (window as any).__betascopeWeightByFrame = currentWeightByFrame; // debugging convenience
+    (window as any).__betascopeMotionByFrame = currentMotionByFrame; // debugging convenience
     (window as any).__betascopeVideoEl = activeVideoEl; // debugging convenience
 
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
     const detectedCount = data.landmarks.filter((f) => f.detected).length;
     const detectionRate = ((detectedCount / data.landmarks.length) * 100).toFixed(1);
 
-    canvas.width = data.video.width;
+    videoWidth = data.video.width;
+    videoHeight = data.video.height;
+    canvas.width = data.video.width * 2; // side-by-side: schematic panel + video panel
     canvas.height = data.video.height;
 
     resultEl.hidden = false;

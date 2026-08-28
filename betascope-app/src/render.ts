@@ -57,8 +57,8 @@ function fadeColour(hex: string, factor: number): string {
   return `rgb(${Math.round(r * factor)}, ${Math.round(g * factor)}, ${Math.round(b * factor)})`;
 }
 
-/** Draws the skeleton (connection lines + per-region coloured, black-outlined dots). */
-function drawPose(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, entry: FrameEntry) {
+/** Draws the skeleton (connection lines + per-region coloured, black-outlined dots). Exported for reuse by plusRender.ts. */
+export function drawPose(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, entry: FrameEntry) {
   const visible = entry.landmarks.map((lm) => lm.visibility >= VISIBILITY_THRESHOLD);
 
   ctx.lineWidth = 3;
@@ -137,8 +137,8 @@ function drawHolds(ctx: CanvasRenderingContext2D, frameIdx: number, analysis: An
   }
 }
 
-/** Draws the yellow CoM diamond + label at the current frame's position. */
-function drawCom(ctx: CanvasRenderingContext2D, px: number, py: number) {
+/** Draws the yellow CoM diamond + label at the current frame's position. Exported for reuse by plusRender.ts. */
+export function drawCom(ctx: CanvasRenderingContext2D, px: number, py: number) {
   const size = 18;
   ctx.beginPath();
   ctx.moveTo(px, py - size);
