@@ -12,11 +12,29 @@ import type { FrameEntry, Landmark, PoseData } from "./types";
 const IDX: Record<string, number> = {};
 LANDMARK_NAMES.forEach((name, i) => (IDX[name] = i));
 
-// Same tuning constants as generate_step_1.py.
-const VELOCITY_THRESHOLD = 0.005;
-const MIN_HOLD_FRAMES = 85;
-const SMOOTH_WINDOW = 4;
-const MAX_GAP_FRAMES = 5;
+/**
+ * User-tunable hold-detection knobs, same tuning constants as
+ * generate_step_1.py by default. All are exposed via the "Analysis
+ * settings" panel in the UI so the results can be tuned without editing
+ * code.
+ */
+export interface AnalysisOptions {
+  /** Normalized-position movement per frame below which a landmark counts as "still". */
+  velocityThreshold: number;
+  /** Consecutive still frames required before a segment counts as a hold. */
+  minHoldFrames: number;
+  /** Frames averaged together before computing velocity, to reduce landmark jitter. */
+  smoothWindow: number;
+  /** Brief motion blips up to this many frames, inside an otherwise-still segment, are ignored. */
+  maxGapFrames: number;
+}
+
+export const DEFAULT_ANALYSIS_OPTIONS: AnalysisOptions = {
+  velocityThreshold: 0.005,
+  minHoldFrames: 85,
+  smoothWindow: 4,
+  maxGapFrames: 5,
+};
 
 export type Side = "left" | "right";
 export type HoldKind = "hand" | "foot";
@@ -324,9 +342,13 @@ function computeComSeries(
 }
 
 /** Runs hold detection + CoM estimation over an entire extracted pose sequence. */
-export function computeAnalysis(poseData: PoseData): AnalysisResult {
+export function computeAnalysis(
+  poseData: PoseData,
+  options: AnalysisOptions = DEFAULT_ANALYSIS_OPTIONS
+): AnalysisResult {
   const { fps, width, height } = poseData.video;
   const frames = poseData.landmarks;
+  const { velocityThreshold, minHoldFrames, smoothWindow, maxGapFrames } = options;
 
   const tasks: { lmIdx: number; side: Side; kind: HoldKind }[] = [
     { lmIdx: IDX["LEFT_WRIST"], side: "left", kind: "hand" },
@@ -340,8 +362,8 @@ export function computeAnalysis(poseData: PoseData): AnalysisResult {
 
   for (const { lmIdx, side, kind } of tasks) {
     const { x, y } = extractPositions(frames, lmIdx);
-    const speed = computeVelocity(x, y, SMOOTH_WINDOW);
-    const segments = findStationarySegments(speed, VELOCITY_THRESHOLD, MIN_HOLD_FRAMES, MAX_GAP_FRAMES);
+    const speed = computeVelocity(x, y, smoothWindow);
+    const segments = findStationarySegments(speed, velocityThreshold, minHoldFrames, maxGapFrames);
     const holds = segmentsToHolds(segments, x, y, side, kind, fps, width, height);
     if (kind === "hand") handholds.push(...holds);
     else footholds.push(...holds);

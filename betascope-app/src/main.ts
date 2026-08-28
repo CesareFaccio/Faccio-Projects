@@ -1,7 +1,7 @@
 import { extractPose, UnsupportedVideoError } from "./poseExtraction";
 import type { PoseData, FrameEntry } from "./types";
-import { computeAnalysis } from "./analysis";
-import type { AnalysisResult } from "./analysis";
+import { computeAnalysis, DEFAULT_ANALYSIS_OPTIONS } from "./analysis";
+import type { AnalysisResult, AnalysisOptions } from "./analysis";
 import { computeWeightDistribution } from "./forces";
 import { computeMotion } from "./motion";
 import type { MotionFrameEntry } from "./motion";
@@ -22,6 +22,13 @@ const canvas = document.getElementById("preview-canvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const downloadJsonBtn = document.getElementById("download-json") as HTMLButtonElement;
 const downloadVideoBtn = document.getElementById("download-video") as HTMLButtonElement;
+const analysisSettingsEl = document.getElementById("analysis-settings") as HTMLDetailsElement;
+const optHoldDurationEl = document.getElementById("opt-hold-duration") as HTMLInputElement;
+const optGapFramesEl = document.getElementById("opt-gap-frames") as HTMLInputElement;
+const optVelocityThresholdEl = document.getElementById("opt-velocity-threshold") as HTMLInputElement;
+const optSmoothWindowEl = document.getElementById("opt-smooth-window") as HTMLInputElement;
+const applySettingsBtn = document.getElementById("apply-settings") as HTMLButtonElement;
+const settingsNoteEl = document.getElementById("settings-note") as HTMLParagraphElement;
 
 const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
 
@@ -63,6 +70,57 @@ function triggerDownload(blob: Blob, filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Runs the full hold/CoM/force/motion analysis pipeline for the given pose
+ * data and options, updating all the module-level analysis state and debug
+ * hooks. Shared by the initial post-extraction run and by the "Apply &
+ * re-analyze" button, which re-runs it with user-edited AnalysisOptions
+ * without re-extracting poses from the video.
+ */
+function runAnalysis(data: PoseData, options: AnalysisOptions) {
+  currentAnalysis = computeAnalysis(data, options);
+  const weight = computeWeightDistribution(data, currentAnalysis);
+  currentWeightByFrame = buildSmoothedWeightByFrame(weight);
+  const motionArr = computeMotion(currentAnalysis.com, data.video.fps);
+  currentMotionByFrame = motionArr
+    ? new Map(motionArr.filter((m) => m.speed_px_s !== null).map((m) => [m.frame, m]))
+    : null;
+  (window as any).__betascopeAnalysis = currentAnalysis; // debugging convenience
+  (window as any).__betascopeWeight = weight; // debugging convenience
+  (window as any).__betascopeWeightByFrame = currentWeightByFrame; // debugging convenience
+  (window as any).__betascopeMotionByFrame = currentMotionByFrame; // debugging convenience
+}
+
+/** Fills the analysis-settings inputs with the given options, converting the frame-based hold threshold to seconds for the given fps. */
+function populateSettingsInputs(options: AnalysisOptions, fps: number) {
+  optHoldDurationEl.value = (options.minHoldFrames / fps).toFixed(2);
+  optGapFramesEl.value = String(options.maxGapFrames);
+  optVelocityThresholdEl.value = String(options.velocityThreshold);
+  optSmoothWindowEl.value = String(options.smoothWindow);
+}
+
+/** Reads the analysis-settings inputs into an AnalysisOptions, converting the seconds-based hold threshold back to frames for the given fps. Falls back to the default for any blank/invalid field. */
+function readSettingsInputs(fps: number): AnalysisOptions {
+  const holdDurationS = parseFloat(optHoldDurationEl.value);
+  const gapFrames = parseInt(optGapFramesEl.value, 10);
+  const velocityThreshold = parseFloat(optVelocityThresholdEl.value);
+  const smoothWindow = parseInt(optSmoothWindowEl.value, 10);
+  return {
+    minHoldFrames:
+      Number.isFinite(holdDurationS) && holdDurationS > 0
+        ? Math.max(1, Math.round(holdDurationS * fps))
+        : DEFAULT_ANALYSIS_OPTIONS.minHoldFrames,
+    maxGapFrames:
+      Number.isFinite(gapFrames) && gapFrames >= 0 ? gapFrames : DEFAULT_ANALYSIS_OPTIONS.maxGapFrames,
+    velocityThreshold:
+      Number.isFinite(velocityThreshold) && velocityThreshold > 0
+        ? velocityThreshold
+        : DEFAULT_ANALYSIS_OPTIONS.velocityThreshold,
+    smoothWindow:
+      Number.isFinite(smoothWindow) && smoothWindow >= 1 ? smoothWindow : DEFAULT_ANALYSIS_OPTIONS.smoothWindow,
+  };
 }
 
 function frameAtTime(t: number): FrameEntry | null {
@@ -132,6 +190,9 @@ async function handleFile(file: File) {
   downloadVideoBtn.hidden = true;
   downloadVideoBtn.disabled = false;
   downloadVideoBtn.textContent = DOWNLOAD_VIDEO_DEFAULT_LABEL;
+  analysisSettingsEl.hidden = true;
+  analysisSettingsEl.open = false;
+  settingsNoteEl.textContent = "";
   setStatus("");
 
   const startedAt = performance.now();
@@ -163,19 +224,10 @@ async function handleFile(file: File) {
 
     const data = result.data;
     currentPoseData = data;
-    currentAnalysis = computeAnalysis(data);
-    const weight = computeWeightDistribution(data, currentAnalysis);
-    currentWeightByFrame = buildSmoothedWeightByFrame(weight);
-    const motionArr = computeMotion(currentAnalysis.com, data.video.fps);
-    currentMotionByFrame = motionArr
-      ? new Map(motionArr.filter((m) => m.speed_px_s !== null).map((m) => [m.frame, m]))
-      : null;
+    runAnalysis(data, DEFAULT_ANALYSIS_OPTIONS);
+    populateSettingsInputs(DEFAULT_ANALYSIS_OPTIONS, data.video.fps);
     activeVideoEl = result.videoElement;
     (window as any).__betascopePoseData = data; // debugging convenience
-    (window as any).__betascopeAnalysis = currentAnalysis; // debugging convenience
-    (window as any).__betascopeWeight = weight; // debugging convenience
-    (window as any).__betascopeWeightByFrame = currentWeightByFrame; // debugging convenience
-    (window as any).__betascopeMotionByFrame = currentMotionByFrame; // debugging convenience
     (window as any).__betascopeVideoEl = activeVideoEl; // debugging convenience
 
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
@@ -190,6 +242,7 @@ async function handleFile(file: File) {
     resultEl.hidden = false;
     downloadJsonBtn.hidden = false;
     downloadVideoBtn.hidden = false;
+    analysisSettingsEl.hidden = false;
     progressBar.style.width = "100%";
     setStatus(
       `Processed ${data.landmarks.length} frames in ${elapsed}s — ${detectionRate}% detection rate ` +
@@ -210,6 +263,17 @@ async function handleFile(file: File) {
     isBusy = false;
   }
 }
+
+applySettingsBtn.addEventListener("click", () => {
+  if (!currentPoseData || isBusy) return;
+  const options = readSettingsInputs(currentPoseData.video.fps);
+  runAnalysis(currentPoseData, options);
+  populateSettingsInputs(options, currentPoseData.video.fps); // reflect any clamped/defaulted values back
+  if (!activeVideoEl || activeVideoEl.paused) drawCurrentFrame(); // playing loop will pick it up on its own next tick
+  const handCount = currentAnalysis!.handholds.length;
+  const footCount = currentAnalysis!.footholds.length;
+  settingsNoteEl.textContent = `Re-analyzed: ${handCount} handhold${handCount === 1 ? "" : "s"}, ${footCount} foothold${footCount === 1 ? "" : "s"} detected.`;
+});
 
 downloadJsonBtn.addEventListener("click", () => {
   if (!currentPoseData) return;

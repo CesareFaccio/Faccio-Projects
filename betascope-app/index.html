@@ -40,6 +40,34 @@
       <button id="download-video" class="download-btn" hidden>Download video with overlay</button>
     </div>
 
+    <details id="analysis-settings" class="analysis-settings" hidden>
+      <summary>Analysis settings</summary>
+      <div class="settings-grid">
+        <label>
+          Hold duration threshold (s)
+          <input id="opt-hold-duration" type="number" step="0.05" min="0.05" />
+          <span class="settings-hint">How long a hand/foot must stay still before it counts as a hold.</span>
+        </label>
+        <label>
+          Gap tolerance (frames)
+          <input id="opt-gap-frames" type="number" step="1" min="0" />
+          <span class="settings-hint">Brief motion blips shorter than this, inside an otherwise-still segment, are ignored.</span>
+        </label>
+        <label>
+          Velocity threshold
+          <input id="opt-velocity-threshold" type="number" step="0.0005" min="0" />
+          <span class="settings-hint">Normalized movement per frame still counted as "still". Lower = stricter.</span>
+        </label>
+        <label>
+          Smoothing window (frames)
+          <input id="opt-smooth-window" type="number" step="1" min="1" />
+          <span class="settings-hint">Frames averaged together before computing velocity, to reduce landmark jitter.</span>
+        </label>
+      </div>
+      <button id="apply-settings" class="download-btn" type="button">Apply &amp; re-analyze</button>
+      <p id="settings-note" class="settings-note"></p>
+    </details>
+
   </main>
 
   <script type="module" src="/src/main.ts"></script>

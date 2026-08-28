@@ -90,3 +90,26 @@ h1 { margin: 16px 0 6px; font-size: 2rem; letter-spacing: -0.02em; }
   background: transparent; color: var(--accent); font-size: 0.9rem; cursor: pointer;
 }
 .download-btn:hover { background: var(--accent); color: var(--bg); }
+
+.analysis-settings {
+  margin-top: 16px; padding: 14px 16px; border-radius: 8px;
+  background: var(--bg-card); border: 1px solid var(--border);
+}
+.analysis-settings[hidden] { display: none; }
+.analysis-settings summary {
+  cursor: pointer; font-size: 0.9rem; color: var(--text); user-select: none;
+}
+.settings-grid {
+  margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr;
+  gap: 14px 16px;
+}
+@media (max-width: 480px) { .settings-grid { grid-template-columns: 1fr; } }
+.settings-grid label {
+  display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text);
+}
+.settings-grid input {
+  padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font-size: 0.9rem;
+}
+.settings-hint { font-size: 0.76rem; color: var(--text-dim); font-weight: 400; }
+.settings-note { margin: 10px 0 0; font-size: 0.78rem; color: var(--text-dim); min-height: 1.2em; }
