@@ -49,6 +49,7 @@ let videoWidth = 0;
 let videoHeight = 0;
 let activeVideoEl: HTMLVideoElement | null = null;
 let playbackRafId: number | null = null;
+let manualPlaybackStartMs: number | null = null; // set only when the fallback (below) is active
 let isBusy = false; // extracting or recording — ignore new drops meanwhile
 
 function setStatus(text: string) {
@@ -159,16 +160,43 @@ function loopTick() {
   playbackRafId = requestAnimationFrame(loopTick);
 }
 
+/**
+ * Fallback used when native playback isn't allowed (some browsers, notably
+ * Safari, reject video.play() unless it happens right after a real user
+ * gesture — true for the auto-loaded demo, which runs on page load with no
+ * gesture at all). Drives the loop by manually scrubbing currentTime against
+ * wall-clock time instead of relying on the browser to advance playback.
+ */
+function manualLoopTick() {
+  if (!activeVideoEl) return;
+  const duration = activeVideoEl.duration || 0;
+  if (duration > 0) {
+    if (manualPlaybackStartMs === null) manualPlaybackStartMs = performance.now();
+    const elapsedS = (performance.now() - manualPlaybackStartMs) / 1000;
+    const target = elapsedS % duration;
+    // Skip redundant seeks for sub-frame-sized changes.
+    if (Math.abs(activeVideoEl.currentTime - target) > 1 / 120) {
+      activeVideoEl.currentTime = target;
+    }
+  }
+  drawCurrentFrame();
+  playbackRafId = requestAnimationFrame(manualLoopTick);
+}
+
 function startLoopPlayback() {
   stopLoopPlayback();
   if (!activeVideoEl) return;
   activeVideoEl.loop = true;
   activeVideoEl.currentTime = 0;
-  activeVideoEl.play().catch(() => {
-    // Autoplay can be blocked in some contexts; the still frame from the
-    // last progress tick stays visible, which is a fine fallback.
-  });
-  playbackRafId = requestAnimationFrame(loopTick);
+  manualPlaybackStartMs = null;
+  activeVideoEl
+    .play()
+    .then(() => {
+      playbackRafId = requestAnimationFrame(loopTick);
+    })
+    .catch(() => {
+      playbackRafId = requestAnimationFrame(manualLoopTick);
+    });
 }
 
 function stopLoopPlayback() {
@@ -176,6 +204,7 @@ function stopLoopPlayback() {
     cancelAnimationFrame(playbackRafId);
     playbackRafId = null;
   }
+  manualPlaybackStartMs = null;
   activeVideoEl?.pause();
 }
 
