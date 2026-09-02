@@ -36,6 +36,10 @@ const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
 // public/ so Vite copies it as-is; BASE_URL keeps it correct under the
 // GitHub Pages subpath (same pattern as poseExtraction.ts's WASM/model paths).
 const DEFAULT_CLIMB_VIDEO_URL = `${import.meta.env.BASE_URL}default-climb.mp4`;
+// Measured with ffprobe when the demo clip was encoded — passed to
+// extractPose() so it can skip its play()-based fps estimation (which
+// needs a real user gesture on some browsers) for the auto-loaded demo.
+const DEFAULT_CLIMB_FPS = 60;
 
 let currentPoseData: PoseData | null = null;
 let currentAnalysis: AnalysisResult | null = null;
@@ -175,7 +179,7 @@ function stopLoopPlayback() {
   activeVideoEl?.pause();
 }
 
-async function handleFile(file: File, isDemo = false) {
+async function handleFile(file: File, isDemo = false, knownFps?: number) {
   if (isBusy) return;
   isBusy = true;
   stopLoopPlayback();
@@ -223,7 +227,7 @@ async function handleFile(file: File, isDemo = false) {
         setStep(stepExtractEl, "done");
         setStatus("Done.");
       }
-    });
+    }, knownFps);
 
     setStep(stepExtractEl, "done");
 
@@ -432,7 +436,7 @@ async function loadDefaultClimb() {
     if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
     const blob = await response.blob();
     const file = new File([blob], "default-climb.mp4", { type: "video/mp4" });
-    await handleFile(file, true);
+    await handleFile(file, true, DEFAULT_CLIMB_FPS);
   } catch (err) {
     // Non-fatal: the page just falls back to its normal empty/upload state.
     console.error("Failed to auto-load the demo climb:", err);

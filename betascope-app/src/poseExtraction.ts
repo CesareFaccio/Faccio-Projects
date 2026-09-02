@@ -164,7 +164,15 @@ function landmarksToFrameEntry(frame: number, timestampS: number, result: { land
 
 export async function extractPose(
   file: File,
-  onProgress?: (p: ExtractionProgress) => void
+  onProgress?: (p: ExtractionProgress) => void,
+  // When the caller already knows the exact fps (e.g. the bundled demo
+  // clip, encoded and measured ahead of time), pass it here to skip
+  // estimateFps() entirely. estimateFps() briefly calls video.play(),
+  // which several browsers (notably Safari) block unless it happens
+  // right after a real user gesture (a click/tap) — fine for a normal
+  // drag-and-drop/file-picker upload, but not for the auto-loaded demo
+  // that runs on page load with no gesture at all.
+  knownFps?: number
 ): Promise<ExtractionResult> {
   onProgress?.({ phase: "loading-model" });
   const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
@@ -174,7 +182,7 @@ export async function extractPose(
   const video = await loadVideo(file);
 
   onProgress?.({ phase: "estimating-fps" });
-  const fps = await estimateFps(video);
+  const fps = knownFps ?? (await estimateFps(video));
   video.currentTime = 0;
 
   const width = video.videoWidth;
