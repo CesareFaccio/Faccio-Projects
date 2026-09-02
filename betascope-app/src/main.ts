@@ -31,6 +31,11 @@ const applySettingsBtn = document.getElementById("apply-settings") as HTMLButton
 const settingsNoteEl = document.getElementById("settings-note") as HTMLParagraphElement;
 
 const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
+// Bundled demo climb, shown automatically on first page load so visitors see
+// a real analysis without having to upload anything themselves. Lives in
+// public/ so Vite copies it as-is; BASE_URL keeps it correct under the
+// GitHub Pages subpath (same pattern as poseExtraction.ts's WASM/model paths).
+const DEFAULT_CLIMB_VIDEO_URL = `${import.meta.env.BASE_URL}default-climb.mp4`;
 
 let currentPoseData: PoseData | null = null;
 let currentAnalysis: AnalysisResult | null = null;
@@ -170,7 +175,7 @@ function stopLoopPlayback() {
   activeVideoEl?.pause();
 }
 
-async function handleFile(file: File) {
+async function handleFile(file: File, isDemo = false) {
   if (isBusy) return;
   isBusy = true;
   stopLoopPlayback();
@@ -245,8 +250,8 @@ async function handleFile(file: File) {
     analysisSettingsEl.hidden = false;
     progressBar.style.width = "100%";
     setStatus(
-      `Processed ${data.landmarks.length} frames in ${elapsed}s — ${detectionRate}% detection rate ` +
-        `(${data.video.width}x${data.video.height} @ ${data.video.fps.toFixed(2)}fps)`
+      `${isDemo ? "Demo climb — " : ""}Processed ${data.landmarks.length} frames in ${elapsed}s — ` +
+        `${detectionRate}% detection rate (${data.video.width}x${data.video.height} @ ${data.video.fps.toFixed(2)}fps)`
     );
 
     startLoopPlayback();
@@ -412,3 +417,26 @@ dropzone.addEventListener("drop", (e) => {
   const file = e.dataTransfer?.files?.[0];
   if (file) handleFile(file);
 });
+
+/**
+ * Loads the bundled demo climb and runs it through the exact same pipeline
+ * as a user-dropped file, so the page shows a real analysis immediately on
+ * first load. Dropping/selecting a video afterwards goes through the normal
+ * dropzone handlers above, which call handleFile() the same way and fully
+ * reset all state — so switching to your own video "just works" with no
+ * special-casing needed for the demo having run first.
+ */
+async function loadDefaultClimb() {
+  try {
+    const response = await fetch(DEFAULT_CLIMB_VIDEO_URL);
+    if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
+    const blob = await response.blob();
+    const file = new File([blob], "default-climb.mp4", { type: "video/mp4" });
+    await handleFile(file, true);
+  } catch (err) {
+    // Non-fatal: the page just falls back to its normal empty/upload state.
+    console.error("Failed to auto-load the demo climb:", err);
+  }
+}
+
+loadDefaultClimb();
