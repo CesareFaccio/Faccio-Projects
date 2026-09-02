@@ -15,6 +15,7 @@ body {
   line-height: 1.5;
 }
 main { max-width: 640px; margin: 0 auto; padding: 48px 24px; }
+.nav-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .back { color: var(--text-dim); text-decoration: none; font-size: 0.9rem; }
 .back:hover { color: var(--accent); }
 h1 { margin: 16px 0 6px; font-size: 2rem; letter-spacing: -0.02em; }

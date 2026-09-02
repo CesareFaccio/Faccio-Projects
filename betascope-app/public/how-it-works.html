@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How BetaScope Works</title>
+  <style>
+    :root {
+      --bg: #0d0f12; --bg-card: #16191e; --border: #26292f;
+      --text: #eceef0; --text-dim: #9aa0a8; --accent: #5eead4;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f7f7f8; --bg-card: #ffffff; --border: #e3e4e7;
+        --text: #16181c; --text-dim: #61666e; --accent: #0f766e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 48px 24px 72px; }
+    .back { color: var(--text-dim); text-decoration: none; font-size: 0.9rem; }
+    .back:hover { color: var(--accent); }
+    h1 { margin: 16px 0 6px; font-size: 2rem; letter-spacing: -0.02em; }
+    .tagline { color: var(--text-dim); margin: 0 0 40px; }
+    h2 {
+      font-size: 1.15rem; margin: 40px 0 12px; letter-spacing: -0.01em;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    h2:first-of-type { margin-top: 0; }
+    p { margin: 0 0 14px; }
+    ul { margin: 0 0 14px; padding-left: 1.2em; }
+    li { margin-bottom: 10px; }
+    li:last-child { margin-bottom: 0; }
+    strong { color: var(--text); }
+    .note {
+      margin-top: 40px; padding: 14px 16px; border-radius: 8px; font-size: 0.9rem;
+      background: var(--bg-card); border: 1px solid var(--border); color: var(--text-dim);
+    }
+    .note strong { color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="./">&larr; Back to BetaScope</a>
+    <h1>How BetaScope Works</h1>
+    <p class="tagline">The short version: your video never leaves your device. Everything below — reading the video, finding your body, and doing the math — happens right there in your browser.</p>
+
+    <h2>Finding your body in the video</h2>
+    <p>BetaScope steps through your video about 60 times a second and, for each of those frames, runs a small AI model that looks for a person and marks 33 points on their body — wrists, elbows, shoulders, hips, knees, ankles, and more. This is the same kind of pose-tracking technology behind phone AR filters and fitness apps (it's called MediaPipe, built by Google) — BetaScope just points it at your climbing footage, one frame at a time, and keeps the results for every frame.</p>
+
+    <h2>What gets measured, and how</h2>
+    <p>Once BetaScope has those 33 points for every frame, it turns them into the numbers and markers you see on screen:</p>
+    <ul>
+      <li><strong>Hand and foot holds.</strong> BetaScope watches your wrists and ankles. Whenever one of them stays almost perfectly still for about a second and a half, that's marked as an active hold. Brief wobbles are ignored, so a real grip doesn't get chopped into pieces by a bit of shake.</li>
+      <li><strong>Your center of mass (balance point).</strong> Rather than tracking one point on your body, BetaScope splits you into segments — forearm, upper arm, thigh, shin, and so on — and gives each one a realistic share of your total body weight, based on published biomechanics research. Averaging all of those segments together gives your true center of gravity, not just your hips or your head.</li>
+      <li><strong>Weight on each hand and foot.</strong> Knowing your balance point and which holds are currently active, BetaScope works out how your body weight must be shared across those holds for you to stay in balance — essentially the same physics a wall-mounted force sensor would measure, worked out from video instead.</li>
+      <li><strong>Elbow and knee angles.</strong> These come straight from the geometry of the tracked points — the angle formed at each joint by the body segments on either side of it.</li>
+      <li><strong>Speed and acceleration.</strong> BetaScope tracks how your balance point moves from frame to frame to work out how fast you're moving and accelerating. The raw numbers are lightly smoothed first, so small per-frame tracking noise doesn't show up as a fake jolt of speed.</li>
+    </ul>
+
+    <h2>Where all of this actually runs</h2>
+    <p>Nowhere but your own device. There's no server involved, nothing gets uploaded, and there's no account or sign-in. When you open the page, your browser downloads the AI model once (a few megabytes) — from then on, every step above (reading your video, running the AI model, doing all the math, and drawing the skeleton and stats on screen) runs using your own device's processor.</p>
+    <p>That's possible thanks to a browser technology called <strong>WebAssembly</strong>, which lets software originally built for serious number-crunching run at near-native speed directly inside a web page — no installing anything, no plugins. It's the same reason BetaScope can be free to use: there's no server doing the work behind the scenes, so there's no compute cost per visitor. The trade-off is that a longer video takes longer to process on your device than it would on a powerful cloud server — a fair swap for keeping everything free and private.</p>
+
+    <div class="note"><strong>A quick honest note:</strong> BetaScope runs a compact AI model for free in your browser rather than lab-grade motion-capture equipment, so tracking is very good but not perfectly precise — small wobbles in the numbers are normal and don't mean anything's wrong.</div>
+  </main>
+</body>
+</html>
