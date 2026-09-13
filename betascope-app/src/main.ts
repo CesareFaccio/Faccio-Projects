@@ -29,17 +29,16 @@ const optVelocityThresholdEl = document.getElementById("opt-velocity-threshold")
 const optSmoothWindowEl = document.getElementById("opt-smooth-window") as HTMLInputElement;
 const applySettingsBtn = document.getElementById("apply-settings") as HTMLButtonElement;
 const settingsNoteEl = document.getElementById("settings-note") as HTMLParagraphElement;
+const demoSectionEl = document.getElementById("demo-section") as HTMLElement;
+const demoVideoEl = document.getElementById("demo-video") as HTMLVideoElement;
 
 const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
-// Bundled demo climb, shown automatically on first page load so visitors see
-// a real analysis without having to upload anything themselves. Lives in
-// public/ so Vite copies it as-is; BASE_URL keeps it correct under the
-// GitHub Pages subpath (same pattern as poseExtraction.ts's WASM/model paths).
-const DEFAULT_CLIMB_VIDEO_URL = `${import.meta.env.BASE_URL}default-climb.mp4`;
-// Measured with ffprobe when the demo clip was encoded — passed to
-// extractPose() so it can skip its play()-based fps estimation (which
-// needs a real user gesture on some browsers) for the auto-loaded demo.
-const DEFAULT_CLIMB_FPS = 60;
+// Pre-rendered example analysis, played as an ordinary <video> the instant
+// the page opens so visitors see the finished output with no model download,
+// no WASM and no inference. Lives in public/ so Vite copies it as-is;
+// BASE_URL keeps it correct under the GitHub Pages subpath (same pattern as
+// poseExtraction.ts's WASM/model paths).
+const DEMO_VIDEO_URL = `${import.meta.env.BASE_URL}demo-analysis.mp4`;
 
 let currentPoseData: PoseData | null = null;
 let currentAnalysis: AnalysisResult | null = null;
@@ -208,9 +207,13 @@ function stopLoopPlayback() {
   activeVideoEl?.pause();
 }
 
-async function handleFile(file: File, isDemo = false, knownFps?: number) {
+async function handleFile(file: File) {
   if (isBusy) return;
   isBusy = true;
+  // The visitor has brought their own climb — retire the pre-rendered example
+  // so only one analysis is on screen, and so its decoding stops competing
+  // with the extraction that is about to run.
+  hideDemo();
   stopLoopPlayback();
   currentPoseData = null;
   currentAnalysis = null;
@@ -256,7 +259,7 @@ async function handleFile(file: File, isDemo = false, knownFps?: number) {
         setStep(stepExtractEl, "done");
         setStatus("Done.");
       }
-    }, knownFps);
+    });
 
     setStep(stepExtractEl, "done");
 
@@ -283,7 +286,7 @@ async function handleFile(file: File, isDemo = false, knownFps?: number) {
     analysisSettingsEl.hidden = false;
     progressBar.style.width = "100%";
     setStatus(
-      `${isDemo ? "Demo climb — " : ""}Processed ${data.landmarks.length} frames in ${elapsed}s — ` +
+      `Processed ${data.landmarks.length} frames in ${elapsed}s — ` +
         `${detectionRate}% detection rate (${data.video.width}x${data.video.height} @ ${data.video.fps.toFixed(2)}fps)`
     );
 
@@ -452,24 +455,33 @@ dropzone.addEventListener("drop", (e) => {
 });
 
 /**
- * Loads the bundled demo climb and runs it through the exact same pipeline
- * as a user-dropped file, so the page shows a real analysis immediately on
- * first load. Dropping/selecting a video afterwards goes through the normal
- * dropzone handlers above, which call handleFile() the same way and fully
- * reset all state — so switching to your own video "just works" with no
- * special-casing needed for the demo having run first.
+ * Removes the pre-rendered example once the visitor analyses their own video.
+ * Pausing and clearing the source first stops the browser holding on to a
+ * decoder for a video that is no longer visible.
  */
-async function loadDefaultClimb() {
-  try {
-    const response = await fetch(DEFAULT_CLIMB_VIDEO_URL);
-    if (!response.ok) throw new Error(`fetch failed: ${response.status}`);
-    const blob = await response.blob();
-    const file = new File([blob], "default-climb.mp4", { type: "video/mp4" });
-    await handleFile(file, true, DEFAULT_CLIMB_FPS);
-  } catch (err) {
-    // Non-fatal: the page just falls back to its normal empty/upload state.
-    console.error("Failed to auto-load the demo climb:", err);
-  }
+function hideDemo() {
+  if (demoSectionEl.hidden) return;
+  demoVideoEl.pause();
+  demoVideoEl.removeAttribute("src");
+  demoVideoEl.load();
+  demoSectionEl.hidden = true;
 }
 
-loadDefaultClimb();
+/**
+ * Starts the pre-rendered example. This is just a <video> tag — none of the
+ * analysis pipeline is involved, which is the whole point: the finished
+ * output is on screen in the time it takes to fetch ~1.5MB, rather than
+ * after a 43MB model download and a few thousand frames of inference.
+ *
+ * Autoplay is muted and inline, which every current browser permits without
+ * a user gesture. If a browser refuses anyway, the controls stay available
+ * so the visitor can start it themselves.
+ */
+function startDemo() {
+  demoVideoEl.src = DEMO_VIDEO_URL;
+  demoVideoEl.play().catch(() => {
+    demoVideoEl.controls = true;
+  });
+}
+
+startDemo();

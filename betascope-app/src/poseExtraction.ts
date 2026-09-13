@@ -1,4 +1,8 @@
-import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
+// Type-only: the MediaPipe runtime is loaded with a dynamic import() inside
+// extractPose(), so it stays out of the initial page bundle entirely. The
+// landing view is a pre-rendered demo video and needs none of this code —
+// it is fetched the first time someone actually analyses a video.
+import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { FrameEntry, PoseData } from "./types";
 import { LANDMARK_NAMES } from "./types";
 
@@ -35,7 +39,10 @@ export const REQUIRED_FORMAT_NOTE =
   'Settings > Camera > Formats is set to "Most Compatible", not "High Efficiency" — HEVC video ' +
   "can't be played by most browsers.";
 
-async function createLandmarker(vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>): Promise<PoseLandmarker> {
+type VisionModule = typeof import("@mediapipe/tasks-vision");
+type VisionFileset = Awaited<ReturnType<VisionModule["FilesetResolver"]["forVisionTasks"]>>;
+
+async function createLandmarker(mp: VisionModule, vision: VisionFileset): Promise<PoseLandmarker> {
   const config = (delegate: "GPU" | "CPU") => ({
     baseOptions: { modelAssetPath: MODEL_PATH, delegate },
     runningMode: "VIDEO" as const,
@@ -45,8 +52,8 @@ async function createLandmarker(vision: Awaited<ReturnType<typeof FilesetResolve
     minTrackingConfidence: 0.5,
   });
   // GPU delegate isn't available on every device/browser — fall back to CPU.
-  return PoseLandmarker.createFromOptions(vision, config("GPU")).catch(() =>
-    PoseLandmarker.createFromOptions(vision, config("CPU"))
+  return mp.PoseLandmarker.createFromOptions(vision, config("GPU")).catch(() =>
+    mp.PoseLandmarker.createFromOptions(vision, config("CPU"))
   );
 }
 
@@ -164,25 +171,20 @@ function landmarksToFrameEntry(frame: number, timestampS: number, result: { land
 
 export async function extractPose(
   file: File,
-  onProgress?: (p: ExtractionProgress) => void,
-  // When the caller already knows the exact fps (e.g. the bundled demo
-  // clip, encoded and measured ahead of time), pass it here to skip
-  // estimateFps() entirely. estimateFps() briefly calls video.play(),
-  // which several browsers (notably Safari) block unless it happens
-  // right after a real user gesture (a click/tap) — fine for a normal
-  // drag-and-drop/file-picker upload, but not for the auto-loaded demo
-  // that runs on page load with no gesture at all.
-  knownFps?: number
+  onProgress?: (p: ExtractionProgress) => void
 ): Promise<ExtractionResult> {
   onProgress?.({ phase: "loading-model" });
-  const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
-  const landmarker = await createLandmarker(vision);
+  // First call pulls in the MediaPipe runtime, then its WASM and the ~9MB
+  // model — all of it deferred until someone actually analyses a video.
+  const mp = await import("@mediapipe/tasks-vision");
+  const vision = await mp.FilesetResolver.forVisionTasks(WASM_BASE);
+  const landmarker = await createLandmarker(mp, vision);
 
   onProgress?.({ phase: "loading-video" });
   const video = await loadVideo(file);
 
   onProgress?.({ phase: "estimating-fps" });
-  const fps = knownFps ?? (await estimateFps(video));
+  const fps = await estimateFps(video);
   video.currentTime = 0;
 
   const width = video.videoWidth;

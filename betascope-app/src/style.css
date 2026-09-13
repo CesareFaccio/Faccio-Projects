@@ -114,3 +114,20 @@ h1 { margin: 16px 0 6px; font-size: 2rem; letter-spacing: -0.02em; }
 }
 .settings-hint { font-size: 0.76rem; color: var(--text-dim); font-weight: 400; }
 .settings-note { margin: 10px 0 0; font-size: 0.78rem; color: var(--text-dim); min-height: 1.2em; }
+
+/* ── Pre-rendered example analysis (shown immediately on load) ───────────── */
+.demo-section { margin-bottom: 40px; }
+.demo-section[hidden] { display: none; }
+.demo-video {
+  width: 100%; display: block; border: 1px solid var(--border);
+  border-radius: 8px; background: #000;
+}
+.demo-caption {
+  margin: 12px 0 0; font-size: 0.82rem; line-height: 1.55; color: var(--text-dim);
+}
+.demo-caption strong { color: var(--text); font-weight: 600; }
+
+/* ── Upload section ──────────────────────────────────────────────────────── */
+.upload-section { border-top: 1px solid var(--border); padding-top: 32px; }
+.section-heading { margin: 0 0 8px; font-size: 1.25rem; letter-spacing: -0.01em; }
+.section-intro { margin: 0 0 20px; font-size: 0.88rem; color: var(--text-dim); }

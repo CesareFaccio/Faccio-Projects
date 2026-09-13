@@ -3,3 +3,7 @@ dist
 .DS_Store
 *.log
 site-scaffold.tar.gz
+
+# Full-resolution master for the demo clip; the web-sized copy that ships
+# lives in betascope-app/public/demo-analysis.mp4.
+/demo_video.mp4
