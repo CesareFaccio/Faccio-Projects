@@ -60,23 +60,30 @@ const CURL = 26; // vorticity confinement strength
 const SPLAT_RADIUS = 0.30;
 const SPLAT_FORCE = 5200;
 
-// Tuning notes, since these interact and the failure mode is not obvious. The
-// box is closed, so dye that neither dissipates nor drains simply accumulates:
-// raise INLET_DYE_RATE or drop DENSITY_DISSIPATION too far and the whole field
-// washes out to flat grey within a minute. The settings below were checked
-// against a 900-step run (~22s of simulated time) and hold steady. To make the
-// plumes climb higher, raise BUOYANCY and lift the DYE_HEIGHT_FADE threshold
-// together, in small steps — and re-check the long-run state, because the
-// first ten seconds look fine either way.
+// Tuning notes. These interact, both failure modes are easy to hit, and both
+// look fine for the first ten seconds — always re-check against a long run.
+//
+// Too much dye: the box is closed, so dye that neither dissipates nor drains
+// accumulates. Raising INLET_DYE_RATE or dropping DENSITY_DISSIPATION too far
+// washes the whole field out to a flat grey wall within a minute.
+//
+// Too much speed: advection backtraces dt*velocity*texelSize per step, so on a
+// 128-wide grid at 60fps a velocity around 900 moves nearly a fifth of the
+// screen in a single step. Past the CFL limit the scheme stops advecting and
+// starts scrambling, and the result looks *weaker*, not stronger. Both
+// INLET_VELOCITY_RATE and BUOYANCY feed this, so raise either one cautiously.
+//
+// The values below were verified against a 900-step run (~22s of simulated
+// time) and hold steady. Change one at a time.
 
 // ── Grate inflow ────────────────────────────────────────────────────────────
 // Rates are per second and multiplied by the frame's dt, so the look does not
 // change with frame rate. INLET_BAND is the grate's thickness in UV units;
 // jets are spaced roughly every INLET_JET_SPACING_PX across the canvas.
-const INLET_BAND = 0.026;
-const INLET_JET_SPACING_PX = 46;
+const INLET_BAND = 0.032;
+const INLET_JET_SPACING_PX = 95;
 const INLET_VELOCITY_RATE = 460;
-const INLET_DYE_RATE = 0.70;
+const INLET_DYE_RATE = 1.15;
 // Sim steps run before the first paint, so the hero opens with plumes already
 // risen rather than an empty black frame that fills in over a few seconds.
 const WARMUP_STEPS = 320;
