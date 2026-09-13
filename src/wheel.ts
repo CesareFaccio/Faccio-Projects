@@ -182,19 +182,17 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     snapTarget = Math.round(angle / geo.stepDeg) * geo.stepDeg;
   }
 
-  /** Rotates to the nearest slot showing `itemIndex`, going whichever way is shorter. */
-  function goToItem(itemIndex: number) {
-    const currentSlot = Math.round(angle / geo.stepDeg);
-    const currentItem = ((currentSlot % uniqueCount) + uniqueCount) % uniqueCount;
-    let stepsForward = (itemIndex - currentItem + uniqueCount) % uniqueCount;
-    if (stepsForward > uniqueCount / 2) stepsForward -= uniqueCount;
-    velocity = 0;
-    snapTarget = (currentSlot + stepsForward) * geo.stepDeg;
+  /** Where the next move should count from: a snap already in flight, so that
+   *  presses arriving faster than the animation still queue up one step each
+   *  rather than all resolving to the same target. */
+  function moveOrigin(): number {
+    return snapTarget !== null ? snapTarget : angle;
   }
 
   function goBySlots(delta: number) {
+    const target = (Math.round(moveOrigin() / geo.stepDeg) + delta) * geo.stepDeg;
     velocity = 0;
-    snapTarget = (Math.round(angle / geo.stepDeg) + delta) * geo.stepDeg;
+    snapTarget = target;
   }
 
   // ── Dragging ─────────────────────────────────────────────────────────────
