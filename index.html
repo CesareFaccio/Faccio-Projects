@@ -4,23 +4,57 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cesare Faccio — Projects</title>
+  <meta name="description" content="Projects by Cesare Faccio — interactive, browser-based tools built around optics, physics and computer vision." />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
+  <header class="site-head">
+    <a class="wordmark" href="./">CF</a>
+    <nav class="site-nav">
+      <a href="#projects">Projects</a>
+      <a href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero" id="hero">
+    <canvas id="fluid-canvas" class="hero__canvas" aria-hidden="true"></canvas>
+    <div class="hero__scrim" aria-hidden="true"></div>
+    <div class="hero__inner">
+      <blockquote class="hero__quote">
+        <p>There is nothing more deceptive than an obvious fact</p>
+        <cite>Sherlock Holmes</cite>
+      </blockquote>
+    </div>
+    <a class="hero__scroll" href="#projects" aria-label="Scroll to projects">
+      <span class="hero__scroll-label">Projects</span>
+      <span class="hero__scroll-line" aria-hidden="true"></span>
+    </a>
+  </section>
+
   <main>
-    <header>
-      <h1>Projects</h1>
-      <p class="tagline">A collection of things I've built.</p>
-    </header>
+    <section class="projects" id="projects">
+      <div class="projects__head">
+        <h1 class="projects__title">Projects</h1>
+        <p class="projects__hint">
+          <span class="hint--wide">Drag to explore &middot; click a card to open</span>
+          <span class="hint--narrow">Swipe to explore</span>
+        </p>
+      </div>
 
-    <section class="grid" id="project-grid">
-      <!-- populated by src/main.ts -->
+      <div class="wheel" id="wheel-viewport" tabindex="0" role="group" aria-label="Projects carousel">
+        <div class="wheel__ring" id="wheel-ring">
+          <!-- populated by src/main.ts -->
+        </div>
+      </div>
+
+      <div class="wheel__meta" id="wheel-meta" aria-live="polite"></div>
     </section>
-
-    <footer>
-      <p>Built and deployed as a static site — no server required.</p>
-    </footer>
   </main>
+
+  <footer class="site-foot">
+    <span>&copy; <span id="year"></span> Cesare Faccio</span>
+    <span>Built as a static site &mdash; everything runs client-side.</span>
+  </footer>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

@@ -1,98 +1,332 @@
-:root {
-  --bg: #0d0f12;
-  --bg-card: #16191e;
-  --border: #26292f;
-  --text: #eceef0;
-  --text-dim: #9aa0a8;
-  --accent: #5eead4;
-  --radius: 10px;
-}
+/* Dark, monochrome, monospace — the hero's fluid simulation is the only
+   colour event on the page, so everything else stays out of its way. */
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f7f7f8;
-    --bg-card: #ffffff;
-    --border: #e3e4e7;
-    --text: #16181c;
-    --text-dim: #61666e;
-    --accent: #0f766e;
-  }
+:root {
+  --bg: #08090b;
+  --bg-raised: #101216;
+  --border: #23262c;
+  --border-bright: #363a42;
+  --text: #e9ebed;
+  --text-dim: #878e97;
+  --text-faint: #5a616a;
+  --accent: #5eead4;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --head-h: 64px;
 }
 
 * { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.5;
+  font-family: var(--mono);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
-main {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 64px 24px 48px;
-}
+a { color: inherit; }
 
-header h1 {
-  font-size: 2.2rem;
-  margin: 0 0 6px;
-  letter-spacing: -0.02em;
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.site-head {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--head-h);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(16px, 4vw, 40px);
+  mix-blend-mode: difference;
 }
-
-.tagline {
-  color: var(--text-dim);
-  margin: 0 0 40px;
+.wordmark {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-decoration: none;
 }
+.site-nav { display: flex; gap: clamp(16px, 3vw, 32px); }
+.site-nav a {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+}
+.site-nav a:hover { opacity: 1; }
 
-.grid {
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  height: 100svh;
+  min-height: 520px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  place-items: center;
+  overflow: hidden;
+  /* Sits behind the canvas, and stands in for it when WebGL is unavailable. */
+  background:
+    radial-gradient(120% 90% at 50% 40%, #1b2026 0%, #0b0d10 55%, #08090b 100%);
+}
+.hero__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hero__canvas.is-unsupported { display: none; }
+
+/* Darkens the middle of the hero so the quote stays readable whatever the
+   simulation happens to be doing behind it, while leaving the edges clear. */
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 58% 46% at 50% 47%,
+    rgba(8, 9, 11, 0.86) 0%,
+    rgba(8, 9, 11, 0.62) 45%,
+    rgba(8, 9, 11, 0.15) 78%,
+    rgba(8, 9, 11, 0) 100%
+  );
+}
+
+.hero__inner {
+  position: relative;
+  z-index: 2;
+  padding: 0 clamp(20px, 6vw, 64px);
+  max-width: 1100px;
+  text-align: center;
+  pointer-events: none;
+}
+.hero__quote { margin: 0; }
+.hero__quote p {
+  margin: 0;
+  font-size: clamp(1.6rem, 5.2vw, 4rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  font-weight: 500;
+  text-wrap: balance;
+  /* Keeps the words legible whatever the simulation does behind them. */
+  text-shadow: 0 2px 40px rgba(0, 0, 0, 0.85), 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+.hero__quote cite {
+  display: block;
+  margin-top: clamp(16px, 3vw, 28px);
+  font-style: normal;
+  font-size: 0.74rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-shadow: 0 1px 20px rgba(0, 0, 0, 0.9);
+}
+
+.hero__scroll {
+  position: absolute;
+  z-index: 2;
+  bottom: clamp(20px, 5vh, 48px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+.hero__scroll:hover { color: var(--text); }
+.hero__scroll-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+.hero__scroll-line {
+  width: 1px;
+  height: 44px;
+  background: linear-gradient(to bottom, currentColor, transparent);
+}
+
+/* ── Projects ─────────────────────────────────────────────────────────────── */
+.projects {
+  position: relative;
+  padding: clamp(64px, 12vh, 140px) 0 clamp(48px, 8vh, 96px);
+}
+.projects__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 0 clamp(16px, 5vw, 56px);
+  margin-bottom: clamp(32px, 6vh, 64px);
+}
+.projects__title {
+  margin: 0;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+/* The breakpoint here must match the wheel's `flatBelow` in wheel.ts: below
+   it the arc becomes a swipeable row, and "drag" stops being the right verb. */
+.hint--narrow { display: none; }
+@media (max-width: 759px) {
+  .hint--wide { display: none; }
+  .hint--narrow { display: inline; }
+}
+
+.projects__hint {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* The wheel: a window onto the top of a large circle. Overflow is hidden so
+   the rest of the rim, and the cards riding it, stay out of sight. */
+.wheel {
+  position: relative;
+  height: clamp(400px, 56vh, 560px);
+  overflow: hidden;
+  cursor: grab;
+  outline: none;
+  touch-action: pan-y;
+}
+.wheel:focus-visible { box-shadow: inset 0 0 0 1px var(--border-bright); }
+.wheel.is-dragging { cursor: grabbing; }
+
+.wheel__ring {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  width: 0;
+  /* height is set in JS — it equals the circle's radius, putting the ring's
+     bottom edge at the centre of rotation. */
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+
+.wheel__slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: clamp(200px, 21vw, 268px);
+  will-change: transform, opacity;
+  transition: opacity 0.25s ease;
 }
 
 .card {
-  background: var(--bg-card);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  aspect-ratio: 3 / 4;
+  padding: 18px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
+  border-radius: 4px;
+  background: linear-gradient(165deg, #15181d 0%, #0c0e11 100%);
+  overflow: hidden;
   text-decoration: none;
   color: inherit;
-  display: block;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  user-select: none;
+  transition: border-color 0.25s ease, background 0.25s ease;
 }
+.wheel__slot.is-active .card { border-color: var(--border-bright); }
+.card:hover { border-color: var(--accent); }
+.card--planned:hover { border-color: var(--border-bright); }
 
-.card:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-}
-
-.card h2 {
-  margin: 0 0 8px;
-  font-size: 1.1rem;
-}
-
-.card p {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 0.92rem;
-}
-
-.badge {
-  display: inline-block;
-  margin-top: 12px;
-  font-size: 0.72rem;
+.card__status {
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  padding: 2px 9px;
+  color: var(--text-faint);
+}
+.card--in-progress .card__status,
+.card--live .card__status { color: var(--accent); }
+
+.card__mark {
+  display: flex;
+  flex-direction: column;
+  font-size: clamp(1.4rem, 2.3vw, 2rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.card--planned .card__mark { color: var(--text-faint); }
+
+.card__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+.card__name { color: var(--text); }
+.card__blurb { color: var(--text-dim); }
+.card__cta { margin-top: 5px; color: var(--accent); }
+.card__cta--muted { color: var(--text-faint); }
+
+.wheel__meta {
+  max-width: 640px;
+  margin: clamp(24px, 5vh, 48px) auto 0;
+  padding: 0 clamp(16px, 5vw, 24px);
+  text-align: center;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+  min-height: 4.5em;
 }
 
-footer {
-  margin-top: 56px;
-  color: var(--text-dim);
-  font-size: 0.85rem;
+/* ── Narrow screens: drop the arc for an honest scroll-snap row ───────────── */
+.wheel.is-flat {
+  height: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: default;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 max(16px, calc(50vw - 130px));
+  scrollbar-width: none;
+}
+.wheel.is-flat::-webkit-scrollbar { display: none; }
+.wheel.is-flat .wheel__ring {
+  position: static;
+  display: flex;
+  gap: 16px;
+  width: max-content;
+  transform: none;
+}
+.wheel.is-flat .wheel__slot {
+  position: static;
+  flex: 0 0 auto;
+  width: 240px;
+  opacity: 1 !important;
+  scroll-snap-align: center;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.site-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 28px clamp(16px, 5vw, 56px);
+  border-top: 1px solid var(--border);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .wheel__slot, .card__face { transition: none; }
 }
