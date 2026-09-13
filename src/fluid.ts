@@ -6,9 +6,16 @@
 // velocity back to divergence-free with a Jacobi pressure solve, and advects a
 // dye field through the result. Pointer movement injects velocity and dye.
 //
-// The field is driven by a fixed inflow along the bottom edge — a row of small
-// jets, like air rising through a perforated grate — rather than by random
-// impulses. Pointer movement disturbs the plumes on top of that.
+// Between pointer input, the field is kept alive by six emitters drifting on
+// slow looping paths, each kicking the fluid several times a second in a
+// direction that sweeps as it goes. Nothing here reads the dye field back, so
+// there is no feedback and nothing that can run away — density is simply
+// injection over dissipation, and the response to every knob is monotonic.
+//
+// Tuning: EMITTER_DYE sets how thick the smoke is (roughly linear), CURL sets
+// how curly versus smooth it looks, and EMITTER_IMPULSE sets how vigorously it
+// churns. Emitter centres are spread across the frame on purpose — emitters
+// that all orbit the middle leave the edges bare and the page never fills.
 //
 // Everything is deliberately dependency-free and runs at a lower internal
 // resolution than the canvas — the dye field is what you see, and it is
@@ -42,92 +49,45 @@ interface DoubleFBO {
 // affects how crisp the smoke looks.
 const SIM_RESOLUTION = 128;
 const DYE_RESOLUTION = 512;
-// The primary density control now that the sponge only covers the top strip.
-// Applied uniformly, so a plume thins as it climbs — which reads as a column
-// dispersing, rather than the hard horizontal line a wide sponge draws.
-const DENSITY_DISSIPATION = 1.90; // how fast the dye fades
-// Absorbing layer near the outflow. Still needed even though the top boundary
-// is genuinely open: the open boundary lets momentum leave, but advection never
-// carries dye out — the top row's backtrace just resamples from below — so
-// without this, dye piles against the ceiling. Keep the ramp wide enough that
-// it doesn't draw a visible horizontal line where it starts to bite.
-const DYE_HEIGHT_FADE = 2.6;
-// Hard ceiling on dye density, so the field can never wash out to flat white.
-const DYE_CEILING = 1.15;
-const VELOCITY_DISSIPATION = 0.11; // how fast the motion dies down
-// Upward acceleration proportional to local dye density.
-//
-// This is what gathers the flow into vertical columns rather than a diffuse
-// haze — without it the hero reads as fine grain. It is safe to raise only
-// because BUOYANCY_CAP bounds the feedback; see the vorticity shader.
-const BUOYANCY = 260;
-// Dye density above which no further lift is added.
-const BUOYANCY_CAP = 0.30;
+const DENSITY_DISSIPATION = 0.55; // how fast the dye fades
+const VELOCITY_DISSIPATION = 0.14; // how fast the motion dies down
 const PRESSURE_DISSIPATION = 0.8;
 const PRESSURE_ITERATIONS = 20;
-// Vorticity confinement re-injects the small eddies that numerical diffusion
-// smears away. High values give churning, curly smoke; that reads as grain
-// rather than flow, so a directed river wants this low.
-const CURL = 7;
+const CURL = 26; // vorticity confinement strength
 // Gaussian falloff denominator, in normalised-UV units squared. Small changes
 // here matter a lot: this is what separates thin wisps from billowing smoke.
 const SPLAT_RADIUS = 0.30;
 const SPLAT_FORCE = 5200;
 
-// Tuning notes. These interact, the failure modes are easy to hit, and all of
-// them look fine for the first ten seconds — always check against a long run.
-//
-// WHAT EACH KNOB ACTUALLY DOES, learned the hard way:
-//
-//   Overall density  — DENSITY_DISSIPATION, then INLET_DYE_RATE. Dissipation
-//     is the better handle: it is applied uniformly, so a plume thins as it
-//     climbs. Response is smooth but sub-linear; expect to move it by a lot.
-//
-//   Character        — CURL. Vorticity confinement re-injects small eddies.
-//     High (20+) gives churning, curly smoke that reads as grain; low (<10)
-//     gives smoother, more directed flow.
-//
-//   Vertical reach   — the open top boundary (divergence + pressure shaders)
-//     does most of this. A closed lid forces recirculation, which caps how far
-//     any column can run, no matter how hard it is driven.
-//
-// TRAPS:
-//
-//   Speed. Advection backtraces dt*velocity*texelSize per step, so on a
-//   128-wide grid at 60fps a velocity near 900 moves a fifth of the screen in
-//   one step. Past the CFL limit the scheme stops advecting and starts
-//   scrambling, and the result looks WEAKER, not stronger.
-//
-//   Buoyancy feedback. Lift proportional to dye density is a loop, and
-//   uncapped it makes the system bistable — the field either dies or fills the
-//   screen, with no usable range between. BUOYANCY_CAP bounds it. If you ever
-//   see a knob flip between "nothing" and "everything" with no middle, suspect
-//   this rather than reaching for finer steps.
-//
-//   Dye never leaves through the open top. The boundary lets momentum out, but
-//   the advection backtrace at the top row just resamples from below, so the
-//   dye budget still has to balance via dissipation and DYE_HEIGHT_FADE.
-//
-// The values below were checked against a 900-step run (~22s simulated). To
-// judge a change, screenshot that long-run state and measure its mean
-// luminance rather than eyeballing it — the eye is a poor judge here, and the
-// first ten seconds tell you nothing. Change one thing at a time.
-
-// ── Grate inflow ────────────────────────────────────────────────────────────
-// Rates are per second and multiplied by the frame's dt, so the look does not
-// change with frame rate. INLET_BAND is the grate's thickness in UV units;
-// jets are spaced roughly every INLET_JET_SPACING_PX across the canvas.
-const INLET_BAND = 0.032;
-const INLET_JET_SPACING_PX = 95;
-const INLET_VELOCITY_RATE = 560;
-const INLET_DYE_RATE = 1.10;
-// Sim steps run before the first paint, so the hero opens with plumes already
-// risen rather than an empty black frame that fills in over a few seconds.
-const WARMUP_STEPS = 320;
-const WARMUP_DT = 1 / 40;
-// Ceiling on warm-up cost, so a slow device gets a shorter warm-up rather than
-// a stalled first paint.
-const WARMUP_BUDGET_MS = 140;
+// ── Emitters ────────────────────────────────────────────────────────────────
+// Rates are per second and scaled by the frame's dt, so the look is
+// frame-rate independent. Density is linear in EMITTER_DYE_RATE and inversely
+// linear in DENSITY_DISSIPATION — no thresholds, no bistability.
+// Forcing is impulsive, not spread evenly over every frame. That matters: the
+// same momentum dribbled in continuously becomes a quasi-steady push, which
+// the pressure solve largely cancels and which produces almost no vorticity.
+// Discrete kicks roll up into vortices — that is what turbulence is made of.
+// The cadence is fast enough (several per second, per emitter) that nothing
+// reads as an individual puff.
+const EMITTER_PERIOD = 0.22; // seconds between kicks, per emitter
+const EMITTER_IMPULSE = 1200; // velocity magnitude per kick
+const EMITTER_DYE = 0.22; // dye added per kick
+// Each emitter orbits its own centre (cx, cy) on its own pair of path
+// frequencies (Hz), and its kick direction sweeps at its own angular rate `fr`
+// (rad/s). The centres are spread across the frame deliberately: emitters that
+// all orbit the middle leave the edges empty and the page never fills.
+// No two frequencies share a common factor, so nothing visibly repeats.
+const EMITTERS = [
+  { cx: 0.24, cy: 0.30, ax: 0.18, ay: 0.16, fx: 0.091, fy: 0.067, px: 0.0, py: 1.7, fr: 0.73 },
+  { cx: 0.76, cy: 0.33, ax: 0.17, ay: 0.18, fx: 0.058, fy: 0.107, px: 2.4, py: 0.5, fr: -0.51 },
+  { cx: 0.30, cy: 0.72, ax: 0.19, ay: 0.15, fx: 0.127, fy: 0.047, px: 4.1, py: 3.3, fr: 0.94 },
+  { cx: 0.70, cy: 0.70, ax: 0.16, ay: 0.19, fx: 0.041, fy: 0.087, px: 5.6, py: 2.2, fr: -1.13 },
+  { cx: 0.50, cy: 0.50, ax: 0.26, ay: 0.22, fx: 0.073, fy: 0.113, px: 1.2, py: 4.4, fr: 0.62 },
+  { cx: 0.50, cy: 0.17, ax: 0.30, ay: 0.12, fx: 0.103, fy: 0.059, px: 3.7, py: 5.1, fr: -0.83 },
+];
+// Sim steps run before the first paint, so the hero opens mid-turbulence.
+const WARMUP_STEPS = 150;
+const WARMUP_DT = 1 / 60;
 
 const BASE_VERTEX_SHADER = `#version 300 es
 precision highp float;
@@ -178,21 +138,12 @@ uniform sampler2D uSource;
 uniform vec2 texelSize;
 uniform float dt;
 uniform float dissipation;
-uniform float maxValue;
-uniform float heightFade;
 out vec4 fragColor;
 void main () {
   vec2 coord = vUv - dt * texture(uVelocity, vUv).xy * texelSize;
   vec4 result = texture(uSource, coord);
-  // The simulation box is closed, so without an outflow the dye injected at
-  // the grate simply accumulates until the field washes out. Fading it towards
-  // the top stands in for smoke leaving the frame, and keeps the plumes
-  // bottom-weighted, which is what rising smoke actually looks like.
-  float decay = 1.0 + (dissipation + heightFade * smoothstep(0.70, 1.0, vUv.y)) * dt;
-  // Ceiling: semi-Lagrangian advection isn't mass-conserving, and a backtrace
-  // that clamps at a boundary re-samples the source row, so a steady inflow
-  // can compound without bound. Effectively disabled for velocity.
-  fragColor = min(result / decay, vec4(maxValue));
+  float decay = 1.0 + dissipation * dt;
+  fragColor = result / decay;
 }`;
 
 const DIVERGENCE_SHADER = `#version 300 es
@@ -206,15 +157,11 @@ void main () {
   float T = texture(uVelocity, vT).y;
   float B = texture(uVelocity, vB).y;
   vec2 C = texture(uVelocity, vUv).xy;
-  // Free-slip walls on the sides and floor: mirror the normal component.
+  // Free-slip walls: mirror the normal component at the boundary.
   if (vL.x < 0.0) { L = -C.x; }
   if (vR.x > 1.0) { R = -C.x; }
+  if (vT.y > 1.0) { T = -C.y; }
   if (vB.y < 0.0) { B = -C.y; }
-  // The top is an open outflow — zero gradient, so fluid can leave. Mirroring
-  // here (as a wall does) is what forced every rising plume to turn back down:
-  // in a sealed box the pressure solve requires anything going up to come back
-  // down somewhere, which caps how far a column can run.
-  if (vT.y > 1.0) { T = C.y; }
   fragColor = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0);
 }`;
 
@@ -236,10 +183,7 @@ precision highp float; precision highp sampler2D;
 in vec2 vUv; in vec2 vL; in vec2 vR; in vec2 vT; in vec2 vB;
 uniform sampler2D uVelocity;
 uniform sampler2D uCurl;
-uniform sampler2D uDye;
 uniform float curl;
-uniform float buoyancy;
-uniform float buoyancyCap;
 uniform float dt;
 out vec4 fragColor;
 void main () {
@@ -252,15 +196,6 @@ void main () {
   force /= length(force) + 0.0001;
   force *= curl * C;
   force.y *= -1.0;
-  // Denser dye is "warmer" and rises. Sampled from the dye field, which is a
-  // finer grid than the velocity field — normalised UVs make that a non-issue.
-  //
-  // The lift is capped. Uncapped, this is a feedback loop — dye lifts faster,
-  // which draws up more dye — and it makes the whole system bistable: the
-  // field either dies out or runs away and fills the screen, with no usable
-  // range between. Capping keeps the organising effect that gathers the flow
-  // into columns while bounding the loop.
-  force.y += buoyancy * min(texture(uDye, vUv).x, buoyancyCap);
   vec2 velocity = texture(uVelocity, vUv).xy;
   velocity += force * dt;
   velocity = min(max(velocity, -1000.0), 1000.0);
@@ -279,12 +214,7 @@ void main () {
   float T = texture(uPressure, vT).x;
   float B = texture(uPressure, vB).x;
   float divergence = texture(uDivergence, vUv).x;
-  float pressure = (L + R + B + T - divergence) * 0.25;
-  // Open outflow: pinning pressure to zero along the top row is what actually
-  // lets mass leave the domain. The zero-gradient velocity condition in the
-  // divergence pass is not enough on its own.
-  if (vT.y > 1.0) { pressure = 0.0; }
-  fragColor = vec4(pressure, 0.0, 0.0, 1.0);
+  fragColor = vec4((L + R + B + T - divergence) * 0.25, 0.0, 0.0, 1.0);
 }`;
 
 const GRADIENT_SUBTRACT_SHADER = `#version 300 es
@@ -305,47 +235,6 @@ void main () {
 
 // The dye field is monochrome smoke; this maps its density onto the page's
 // palette and adds a vignette so the quote in the middle stays readable.
-// A row of jets along the bottom edge. Used twice per frame — once to add
-// upward velocity, once to add dye — selected by uMode.
-const INLET_SHADER = `#version 300 es
-precision highp float; precision highp sampler2D;
-in vec2 vUv;
-uniform sampler2D uTarget;
-uniform float uJets;
-uniform float uBand;
-uniform float uTime;
-uniform float uMode;
-uniform float uAmount;
-out vec4 fragColor;
-
-float hash(float n) { return fract(sin(n * 127.1) * 43758.5453123); }
-
-void main () {
-  // A thin band just above the bottom edge — not flush with it, so the
-  // advection backtrace above the grate doesn't clamp into the source row.
-  float dy = vUv.y - 0.015;
-  float band = exp(-(dy * dy) / (uBand * uBand));
-  // Sharp, evenly spaced holes rather than a continuous slot.
-  float holes = pow(0.5 + 0.5 * cos(vUv.x * uJets * 6.28318530718), 10.0);
-  // Each hole breathes at its own rate, so the plumes stay unsteady instead of
-  // settling into a static, obviously synthetic pattern.
-  float h = hash(floor(vUv.x * uJets));
-  float wobble = 0.62 + 0.5 * sin(uTime * (0.5 + h * 1.4) + h * 6.2832);
-
-  float flow = band * holes * wobble;
-  vec3 base = texture(uTarget, vUv).xyz;
-  vec3 add;
-  if (uMode < 0.5) {
-    // Mostly upward, with a little sway so neighbouring plumes interact
-    // instead of rising as independent parallel columns.
-    float sway = sin(uTime * (0.35 + h) + h * 3.14159) * 0.10;
-    add = vec3(sway * uAmount * flow, uAmount * flow, 0.0);
-  } else {
-    add = vec3(uAmount * flow);
-  }
-  fragColor = vec4(base + add, 1.0);
-}`;
-
 const DISPLAY_SHADER = `#version 300 es
 precision highp float; precision highp sampler2D;
 in vec2 vUv;
@@ -507,7 +396,6 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   const vorticityProgram = new Program(gl, vertexShader, VORTICITY_SHADER);
   const pressureProgram = new Program(gl, vertexShader, PRESSURE_SHADER);
   const gradientSubtractProgram = new Program(gl, vertexShader, GRADIENT_SUBTRACT_SHADER);
-  const inletProgram = new Program(gl, vertexShader, INLET_SHADER);
   const displayProgram = new Program(gl, vertexShader, DISPLAY_SHADER);
 
   // Aspect-correct simulation grids, so eddies stay round on a wide viewport.
@@ -565,10 +453,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     gl!.uniform2f(vorticityProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1i(vorticityProgram.uniforms.uVelocity!, velocity.read.attach(0));
     gl!.uniform1i(vorticityProgram.uniforms.uCurl!, curlFBO.attach(1));
-    gl!.uniform1i(vorticityProgram.uniforms.uDye!, dye.read.attach(2));
     gl!.uniform1f(vorticityProgram.uniforms.curl!, CURL);
-    gl!.uniform1f(vorticityProgram.uniforms.buoyancy!, BUOYANCY);
-    gl!.uniform1f(vorticityProgram.uniforms.buoyancyCap!, BUOYANCY_CAP);
     gl!.uniform1f(vorticityProgram.uniforms.dt!, dt);
     blit(velocity.write);
     velocity.swap();
@@ -608,16 +493,12 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     gl!.uniform1i(advectionProgram.uniforms.uSource!, velocity.read.attach(0));
     gl!.uniform1f(advectionProgram.uniforms.dt!, dt);
     gl!.uniform1f(advectionProgram.uniforms.dissipation!, VELOCITY_DISSIPATION);
-    gl!.uniform1f(advectionProgram.uniforms.maxValue!, 1e6);
-    gl!.uniform1f(advectionProgram.uniforms.heightFade!, 0);
     blit(velocity.write);
     velocity.swap();
 
     gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
     gl!.uniform1i(advectionProgram.uniforms.uSource!, dye.read.attach(1));
     gl!.uniform1f(advectionProgram.uniforms.dissipation!, DENSITY_DISSIPATION);
-    gl!.uniform1f(advectionProgram.uniforms.maxValue!, DYE_CEILING);
-    gl!.uniform1f(advectionProgram.uniforms.heightFade!, DYE_HEIGHT_FADE);
     blit(dye.write);
     dye.swap();
   }
@@ -661,27 +542,26 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   window.addEventListener("pointermove", onPointerMove, { passive: true });
   window.addEventListener("pointerleave", onPointerLeave, { passive: true });
 
-  // ── Grate inflow ─────────────────────────────────────────────────────────
-  // Injects upward velocity and dye through a row of holes along the bottom
-  // edge, every frame. This is what keeps the hero moving on its own.
-  let jetCount = 20;
-  function inlet(dt: number, timeSeconds: number) {
-    inletProgram.bind();
-    gl!.uniform1f(inletProgram.uniforms.uJets!, jetCount);
-    gl!.uniform1f(inletProgram.uniforms.uBand!, INLET_BAND);
-    gl!.uniform1f(inletProgram.uniforms.uTime!, timeSeconds);
-
-    gl!.uniform1f(inletProgram.uniforms.uMode!, 0);
-    gl!.uniform1f(inletProgram.uniforms.uAmount!, INLET_VELOCITY_RATE * dt);
-    gl!.uniform1i(inletProgram.uniforms.uTarget!, velocity.read.attach(0));
-    blit(velocity.write);
-    velocity.swap();
-
-    gl!.uniform1f(inletProgram.uniforms.uMode!, 1);
-    gl!.uniform1f(inletProgram.uniforms.uAmount!, INLET_DYE_RATE * dt);
-    gl!.uniform1i(inletProgram.uniforms.uTarget!, dye.read.attach(0));
-    blit(dye.write);
-    dye.swap();
+  // ── Emitters ─────────────────────────────────────────────────────────────
+  // Each emitter rides a slow Lissajous loop, injecting continuously along its
+  // own direction of travel. Because they never stop and never jump, the field
+  // is stirred smoothly rather than punched — no moment where a discrete puff
+  // appears — and the four of them together keep the whole frame in motion.
+  const emitterClocks = EMITTERS.map((_, i) => (i * EMITTER_PERIOD) / EMITTERS.length);
+  function stir(dt: number, t: number) {
+    for (let i = 0; i < EMITTERS.length; i++) {
+      emitterClocks[i] += dt;
+      if (emitterClocks[i] < EMITTER_PERIOD) continue;
+      emitterClocks[i] -= EMITTER_PERIOD;
+      const e = EMITTERS[i];
+      const x = e.cx + e.ax * Math.sin(t * e.fx * 6.2832 + e.px);
+      const y = e.cy + e.ay * Math.cos(t * e.fy * 6.2832 + e.py);
+      // The kick direction sweeps independently of the path, so successive
+      // kicks from one emitter fan around rather than pushing the same way —
+      // which is what deposits vorticity instead of a steady current.
+      const angle = t * e.fr + e.px;
+      splat(x, y, Math.cos(angle) * EMITTER_IMPULSE, Math.sin(angle) * EMITTER_IMPULSE, EMITTER_DYE);
+    }
   }
 
   // ── Sizing ───────────────────────────────────────────────────────────────
@@ -695,8 +575,6 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
       canvas.width = w;
       canvas.height = h;
     }
-    // Keep the holes a roughly constant size on screen at any width.
-    jetCount = Math.max(6, Math.min(48, Math.round(canvas.clientWidth / INLET_JET_SPACING_PX)));
   }
   resize();
   window.addEventListener("resize", resize);
@@ -713,7 +591,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     const dt = Math.min((now - lastTime) / 1000, 0.0166);
     lastTime = now;
     resize();
-    inlet(dt, now / 1000);
+    stir(dt, now / 1000);
     step(dt);
     render();
     rafId = requestAnimationFrame(frame);
@@ -745,19 +623,18 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   observer.observe(canvas);
   document.addEventListener("visibilitychange", sync);
 
-  // Run the inflow forward before the first paint so the hero opens mid-plume
-  // rather than as an empty frame that slowly fills.
+  // Run the emitters forward before the first paint so the hero opens with
+  // developed turbulence rather than an empty frame that fills in.
   {
-    const warmDt = WARMUP_DT;
-    const warmSteps = compact ? 150 : WARMUP_STEPS;
-    const deadline = performance.now() + (compact ? WARMUP_BUDGET_MS * 0.6 : WARMUP_BUDGET_MS);
+    const warmSteps = compact ? 80 : WARMUP_STEPS;
     for (let i = 0; i < warmSteps; i++) {
-      inlet(warmDt, i * warmDt);
-      step(warmDt);
-      // Checked every 16 steps: often enough to bound the cost, rarely enough
-      // that the timing calls themselves don't show up in it.
-      if ((i & 15) === 15 && performance.now() > deadline) break;
+      stir(WARMUP_DT, i * WARMUP_DT);
+      step(WARMUP_DT);
     }
+    // Paint the warmed state immediately rather than waiting for the first
+    // animation frame. Without this the canvas stays blank until rAF runs,
+    // which is a visible flash of empty hero on a slow first frame.
+    render();
   }
   sync();
 
