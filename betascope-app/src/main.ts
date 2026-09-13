@@ -386,8 +386,22 @@ async function downloadOverlayVideo() {
       return;
     }
 
-    const mimeCandidates = ["video/webm;codecs=vp8", "video/webm;codecs=vp9", "video/webm"];
+    // MP4/H.264 first, because that is what actually opens in QuickTime,
+    // iMovie, Premiere and a phone's camera roll — a WebM download is a file
+    // most people can't do anything with. Chrome and Safari can record MP4
+    // directly; Firefox can't, so WebM stays as the fallback rather than the
+    // default. isTypeSupported() decides at runtime, so a browser gaining or
+    // losing MP4 support needs no change here.
+    const mimeCandidates = [
+      "video/mp4;codecs=avc1.640028",
+      "video/mp4;codecs=avc1.42E01E",
+      "video/mp4",
+      "video/webm;codecs=vp8",
+      "video/webm;codecs=vp9",
+      "video/webm",
+    ];
     const mimeType = mimeCandidates.find((m) => MediaRecorder.isTypeSupported?.(m)) ?? "video/webm";
+    const extension = mimeType.startsWith("video/mp4") ? "mp4" : "webm";
 
     // captureStream()+MediaRecorder occasionally produces a near-empty
     // recording under load — a real timing race in the browser's capture
@@ -422,7 +436,7 @@ async function downloadOverlayVideo() {
       return;
     }
 
-    triggerDownload(blob, "climbing_pose_overlay.webm");
+    triggerDownload(blob, `climbing_pose_overlay.${extension}`);
   } finally {
     downloadVideoBtn.textContent = DOWNLOAD_VIDEO_DEFAULT_LABEL;
     downloadJsonBtn.disabled = false;
