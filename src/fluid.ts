@@ -6,16 +6,23 @@
 // velocity back to divergence-free with a Jacobi pressure solve, and advects a
 // dye field through the result. Pointer movement injects velocity and dye.
 //
-// Between pointer input, the field is kept alive by six emitters drifting on
-// slow looping paths, each kicking the fluid several times a second in a
-// direction that sweeps as it goes. Nothing here reads the dye field back, so
-// there is no feedback and nothing that can run away — density is simply
-// injection over dissipation, and the response to every knob is monotonic.
+// The set-up is a channel: a steady inflow across the left edge, an open
+// outflow on the right, free-slip top and bottom, and a staggered row of small
+// cylinders just downstream of the inlet. The cylinders shed vortices which
+// break down across the rest of the frame — grid turbulence, the standard way
+// a wind tunnel is made turbulent. Horizontal smoke rakes at the inlet make it
+// visible as streaklines, the way a real flow-visualisation rig does.
 //
-// Tuning: EMITTER_DYE sets how thick the smoke is (roughly linear), CURL sets
-// how curly versus smooth it looks, and EMITTER_IMPULSE sets how vigorously it
-// churns. Emitter centres are spread across the frame on purpose — emitters
-// that all orbit the middle leave the edges bare and the page never fills.
+// Everything enters at the inlet and leaves at the outlet, continuously.
+// Nothing is ever added in the middle of the frame, so nothing can read as a
+// puff.
+//
+// Tuning: INLET_DYE_RATE sets how thick the smoke is; CURL and
+// VELOCITY_DISSIPATION together set how turbulent it looks (more curl, less
+// dissipation = higher effective Reynolds number); INLET_SPEED sets how fast
+// it crosses. Keep INLET_SPEED well under the CFL limit — advection backtraces
+// dt*velocity*texelSize per step, so a few hundred on a ~200-wide grid is
+// already a large fraction of a cell.
 //
 // Everything is deliberately dependency-free and runs at a lower internal
 // resolution than the canvas — the dye field is what you see, and it is
@@ -47,46 +54,33 @@ interface DoubleFBO {
 
 // Tuning. SIM_RESOLUTION drives cost almost entirely; DYE_RESOLUTION only
 // affects how crisp the smoke looks.
-const SIM_RESOLUTION = 128;
-const DYE_RESOLUTION = 512;
-const DENSITY_DISSIPATION = 0.55; // how fast the dye fades
-const VELOCITY_DISSIPATION = 0.14; // how fast the motion dies down
+const SIM_RESOLUTION = 160;
+const DYE_RESOLUTION = 384;
+const DENSITY_DISSIPATION = 0.45; // how fast the dye fades
+const VELOCITY_DISSIPATION = 0.06; // how fast the motion dies down
 const PRESSURE_DISSIPATION = 0.8;
 const PRESSURE_ITERATIONS = 20;
-const CURL = 26; // vorticity confinement strength
+const CURL = 30; // vorticity confinement strength
 // Gaussian falloff denominator, in normalised-UV units squared. Small changes
 // here matter a lot: this is what separates thin wisps from billowing smoke.
 const SPLAT_RADIUS = 0.30;
 const SPLAT_FORCE = 5200;
 
-// ── Emitters ────────────────────────────────────────────────────────────────
-// Rates are per second and scaled by the frame's dt, so the look is
-// frame-rate independent. Density is linear in EMITTER_DYE_RATE and inversely
-// linear in DENSITY_DISSIPATION — no thresholds, no bistability.
-// Forcing is impulsive, not spread evenly over every frame. That matters: the
-// same momentum dribbled in continuously becomes a quasi-steady push, which
-// the pressure solve largely cancels and which produces almost no vorticity.
-// Discrete kicks roll up into vortices — that is what turbulence is made of.
-// The cadence is fast enough (several per second, per emitter) that nothing
-// reads as an individual puff.
-const EMITTER_PERIOD = 0.22; // seconds between kicks, per emitter
-const EMITTER_IMPULSE = 1200; // velocity magnitude per kick
-const EMITTER_DYE = 0.22; // dye added per kick
-// Each emitter orbits its own centre (cx, cy) on its own pair of path
-// frequencies (Hz), and its kick direction sweeps at its own angular rate `fr`
-// (rad/s). The centres are spread across the frame deliberately: emitters that
-// all orbit the middle leave the edges empty and the page never fills.
-// No two frequencies share a common factor, so nothing visibly repeats.
-const EMITTERS = [
-  { cx: 0.24, cy: 0.30, ax: 0.18, ay: 0.16, fx: 0.091, fy: 0.067, px: 0.0, py: 1.7, fr: 0.73 },
-  { cx: 0.76, cy: 0.33, ax: 0.17, ay: 0.18, fx: 0.058, fy: 0.107, px: 2.4, py: 0.5, fr: -0.51 },
-  { cx: 0.30, cy: 0.72, ax: 0.19, ay: 0.15, fx: 0.127, fy: 0.047, px: 4.1, py: 3.3, fr: 0.94 },
-  { cx: 0.70, cy: 0.70, ax: 0.16, ay: 0.19, fx: 0.041, fy: 0.087, px: 5.6, py: 2.2, fr: -1.13 },
-  { cx: 0.50, cy: 0.50, ax: 0.26, ay: 0.22, fx: 0.073, fy: 0.113, px: 1.2, py: 4.4, fr: 0.62 },
-  { cx: 0.50, cy: 0.17, ax: 0.30, ay: 0.12, fx: 0.103, fy: 0.059, px: 3.7, py: 5.1, fr: -0.83 },
-];
+// ── Channel ─────────────────────────────────────────────────────────────────
+const INLET_SPEED = 130; // sim units; well inside the CFL limit
+const INLET_DYE_RATE = 0.40; // dye per second at the rakes
+const INLET_WIDTH = 0.05; // how far in from the left the inflow is imposed
+const RAKE_COUNT = 24; // horizontal smoke lines seeded at the inlet
+const OBSTACLE_COUNT = 7; // cylinders spanning the channel
+const OBSTACLE_X = 0.17; // their distance from the left edge
+const OBSTACLE_R = 0.028; // radius, in units of canvas height
+// Brightness response: higher makes thin smoke show up more. It only changes
+// how the field is drawn, never the simulation, so it is the safer of the two
+// brightness knobs to reach for.
+const DISPLAY_GAIN = 1.5;
+
 // Sim steps run before the first paint, so the hero opens mid-turbulence.
-const WARMUP_STEPS = 150;
+const WARMUP_STEPS = 260;
 const WARMUP_DT = 1 / 60;
 
 const BASE_VERTEX_SHADER = `#version 300 es
@@ -157,11 +151,13 @@ void main () {
   float T = texture(uVelocity, vT).y;
   float B = texture(uVelocity, vB).y;
   vec2 C = texture(uVelocity, vUv).xy;
-  // Free-slip walls: mirror the normal component at the boundary.
-  if (vL.x < 0.0) { L = -C.x; }
-  if (vR.x > 1.0) { R = -C.x; }
+  // Free-slip top and bottom: mirror the normal component.
   if (vT.y > 1.0) { T = -C.y; }
   if (vB.y < 0.0) { B = -C.y; }
+  // Left is a prescribed inflow, so the clamped sample is already the value we
+  // want. Right is an open outflow — zero gradient, so fluid can leave rather
+  // than being reflected back and forcing the channel to recirculate.
+  if (vR.x > 1.0) { R = C.x; }
   fragColor = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0);
 }`;
 
@@ -214,7 +210,11 @@ void main () {
   float T = texture(uPressure, vT).x;
   float B = texture(uPressure, vB).x;
   float divergence = texture(uDivergence, vUv).x;
-  fragColor = vec4((L + R + B + T - divergence) * 0.25, 0.0, 0.0, 1.0);
+  float pressure = (L + R + B + T - divergence) * 0.25;
+  // Pinning pressure to zero at the outflow is what actually lets mass leave;
+  // the zero-gradient velocity condition alone is not enough.
+  if (vR.x > 1.0) { pressure = 0.0; }
+  fragColor = vec4(pressure, 0.0, 0.0, 1.0);
 }`;
 
 const GRADIENT_SUBTRACT_SHADER = `#version 300 es
@@ -235,22 +235,92 @@ void main () {
 
 // The dye field is monochrome smoke; this maps its density onto the page's
 // palette and adds a vignette so the quote in the middle stays readable.
+// Shared by the obstacle mask and the display, so the cylinders drawn on
+// screen are exactly the ones the fluid sees.
+const OBSTACLE_GLSL = `
+float solidAt(vec2 uv, float count, float cx0, float r, float aspect) {
+  float slot = floor(uv.y * count);
+  float cy = (slot + 0.5) / count;
+  // Alternate cylinders sit slightly fore and aft, so the wakes interleave
+  // instead of shedding in lockstep across the whole span.
+  float cx = cx0 + (mod(slot, 2.0) - 0.5) * r * 2.2;
+  vec2 d = vec2((uv.x - cx) * aspect, uv.y - cy);
+  return 1.0 - smoothstep(r * 0.82, r, length(d));
+}`;
+
+// Imposes the inflow on the left edge. Used twice per frame: once to set
+// velocity (a boundary condition, so it relaxes toward a target rather than
+// accumulating) and once to lay down the smoke rakes.
+const INLET_SHADER = `#version 300 es
+precision highp float; precision highp sampler2D;
+in vec2 vUv;
+uniform sampler2D uTarget;
+uniform float uMode;
+uniform float uSpeed;
+uniform float uAmount;
+uniform float uRakes;
+uniform float uWidth;
+uniform float uTime;
+out vec4 fragColor;
+void main () {
+  vec3 base = texture(uTarget, vUv).xyz;
+  float band = smoothstep(uWidth, 0.0, vUv.x);
+  if (uMode < 0.5) {
+    // A slow shear across the inlet, so the cylinder wakes are not all
+    // identical and the turbulence downstream stays irregular.
+    float shear = 0.05 * sin(vUv.y * 7.0 + uTime * 0.5) + 0.03 * sin(vUv.y * 13.0 - uTime * 0.31);
+    fragColor = vec4(mix(base.xy, vec2(uSpeed, uSpeed * shear), band), 0.0, 1.0);
+  } else {
+    float rakes = pow(0.5 + 0.5 * cos(vUv.y * uRakes * 6.2831853), 6.0);
+    fragColor = vec4(base + band * rakes * uAmount, 1.0);
+  }
+}`;
+
+// Zeroes whatever it is given inside the cylinders — applied to velocity (so
+// the flow has to go around them) and to dye (so they read as solid).
+const OBSTACLE_SHADER = `#version 300 es
+precision highp float; precision highp sampler2D;
+in vec2 vUv;
+uniform sampler2D uTarget;
+uniform float uCount;
+uniform float uX;
+uniform float uR;
+uniform float uAspect;
+out vec4 fragColor;
+${OBSTACLE_GLSL}
+void main () {
+  fragColor = texture(uTarget, vUv) * (1.0 - solidAt(vUv, uCount, uX, uR, uAspect));
+}`;
+
 const DISPLAY_SHADER = `#version 300 es
 precision highp float; precision highp sampler2D;
 in vec2 vUv;
 uniform sampler2D uTexture;
+uniform float uCount;
+uniform float uX;
+uniform float uR;
+uniform float uAspect;
+uniform float uGain;
 out vec4 fragColor;
+${OBSTACLE_GLSL}
 void main () {
   vec3 c = texture(uTexture, vUv).rgb;
-  float d = clamp(max(max(c.r, c.g), c.b), 0.0, 1.0);
-  d = pow(d, 0.85);
+  float d = max(max(c.r, c.g), c.b);
+  // A smooth saturating response, not a smoothstep knee. The knee behaved as a
+  // cliff: the density field is fairly uniform, so once it crossed, the whole
+  // frame flipped from black to washed-out at once and no dye rate in between
+  // gave a usable picture. This is monotonic everywhere, so brightness tracks
+  // density gradually and mid densities show their structure.
+  float v = 1.0 - exp(-uGain * max(d, 0.0));
   vec3 deep = vec3(0.031, 0.035, 0.043);
   vec3 mid  = vec3(0.325, 0.396, 0.427);
   vec3 hot  = vec3(0.706, 0.784, 0.776);
-  vec3 col = mix(deep, mid, smoothstep(0.0, 0.34, d));
-  col = mix(col, hot, smoothstep(0.34, 0.95, d));
+  vec3 col = mix(deep, mid, min(v * 1.5, 1.0));
+  col = mix(col, hot, clamp((v - 0.62) / 0.38, 0.0, 1.0));
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.75 * dot(q, q);
+  float solid = solidAt(vUv, uCount, uX, uR, uAspect);
+  col = mix(col, vec3(0.055, 0.062, 0.072), solid);
   fragColor = vec4(col, 1.0);
 }`;
 
@@ -397,6 +467,8 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   const pressureProgram = new Program(gl, vertexShader, PRESSURE_SHADER);
   const gradientSubtractProgram = new Program(gl, vertexShader, GRADIENT_SUBTRACT_SHADER);
   const displayProgram = new Program(gl, vertexShader, DISPLAY_SHADER);
+  const inletProgram = new Program(gl, vertexShader, INLET_SHADER);
+  const obstacleProgram = new Program(gl, vertexShader, OBSTACLE_SHADER);
 
   // Aspect-correct simulation grids, so eddies stay round on a wide viewport.
   function getResolution(resolution: number) {
@@ -405,6 +477,19 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     const min = Math.round(resolution);
     const max = Math.round(resolution * ratio);
     return aspect > 1 ? { width: max, height: min } : { width: min, height: max };
+  }
+
+  // Size the drawing buffer before the grids are derived from it. Without
+  // this they are computed from the canvas's default 300x150, so the
+  // simulation runs at the wrong aspect ratio and the flow comes out stretched.
+  {
+    const dpr0 = Math.min(window.devicePixelRatio || 1, 1.75);
+    const w0 = Math.round(canvas.clientWidth * dpr0);
+    const h0 = Math.round(canvas.clientHeight * dpr0);
+    if (w0 > 0 && h0 > 0) {
+      canvas.width = w0;
+      canvas.height = h0;
+    }
   }
 
   // Phones get a coarser grid and fewer solver iterations. The dye field is
@@ -420,6 +505,42 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   const divergence = createFBO(simRes.width, simRes.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
   const curlFBO = createFBO(simRes.width, simRes.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
   const pressure = createDoubleFBO(simRes.width, simRes.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
+
+  function canvasAspect() {
+    return canvas.width / canvas.height || 1;
+  }
+
+  /** Zeroes the given field inside the cylinders. */
+  function maskObstacles(target: DoubleFBO) {
+    obstacleProgram.bind();
+    gl!.uniform1f(obstacleProgram.uniforms.uCount!, OBSTACLE_COUNT);
+    gl!.uniform1f(obstacleProgram.uniforms.uX!, OBSTACLE_X);
+    gl!.uniform1f(obstacleProgram.uniforms.uR!, OBSTACLE_R);
+    gl!.uniform1f(obstacleProgram.uniforms.uAspect!, canvasAspect());
+    gl!.uniform1i(obstacleProgram.uniforms.uTarget!, target.read.attach(0));
+    blit(target.write);
+    target.swap();
+  }
+
+  /** Imposes the inflow and lays down the smoke rakes at the left edge. */
+  function inflow(dt: number, timeSeconds: number) {
+    inletProgram.bind();
+    gl!.uniform1f(inletProgram.uniforms.uWidth!, INLET_WIDTH);
+    gl!.uniform1f(inletProgram.uniforms.uRakes!, RAKE_COUNT);
+    gl!.uniform1f(inletProgram.uniforms.uTime!, timeSeconds);
+    gl!.uniform1f(inletProgram.uniforms.uSpeed!, INLET_SPEED);
+
+    gl!.uniform1f(inletProgram.uniforms.uMode!, 0);
+    gl!.uniform1i(inletProgram.uniforms.uTarget!, velocity.read.attach(0));
+    blit(velocity.write);
+    velocity.swap();
+
+    gl!.uniform1f(inletProgram.uniforms.uMode!, 1);
+    gl!.uniform1f(inletProgram.uniforms.uAmount!, INLET_DYE_RATE * dt);
+    gl!.uniform1i(inletProgram.uniforms.uTarget!, dye.read.attach(0));
+    blit(dye.write);
+    dye.swap();
+  }
 
   function splat(x: number, y: number, dx: number, dy: number, intensity: number) {
     splatProgram.bind();
@@ -487,6 +608,11 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     blit(velocity.write);
     velocity.swap();
 
+    // The cylinders are enforced by zeroing velocity inside them after the
+    // projection. Not a true no-slip boundary, but it sheds convincingly and
+    // costs one pass.
+    maskObstacles(velocity);
+
     advectionProgram.bind();
     gl!.uniform2f(advectionProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
@@ -501,10 +627,17 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     gl!.uniform1f(advectionProgram.uniforms.dissipation!, DENSITY_DISSIPATION);
     blit(dye.write);
     dye.swap();
+
+    maskObstacles(dye);
   }
 
   function render() {
     displayProgram.bind();
+    gl!.uniform1f(displayProgram.uniforms.uCount!, OBSTACLE_COUNT);
+    gl!.uniform1f(displayProgram.uniforms.uX!, OBSTACLE_X);
+    gl!.uniform1f(displayProgram.uniforms.uR!, OBSTACLE_R);
+    gl!.uniform1f(displayProgram.uniforms.uAspect!, canvasAspect());
+    gl!.uniform1f(displayProgram.uniforms.uGain!, DISPLAY_GAIN);
     gl!.uniform1i(displayProgram.uniforms.uTexture!, dye.read.attach(0));
     blit(null);
   }
@@ -547,23 +680,6 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   // own direction of travel. Because they never stop and never jump, the field
   // is stirred smoothly rather than punched — no moment where a discrete puff
   // appears — and the four of them together keep the whole frame in motion.
-  const emitterClocks = EMITTERS.map((_, i) => (i * EMITTER_PERIOD) / EMITTERS.length);
-  function stir(dt: number, t: number) {
-    for (let i = 0; i < EMITTERS.length; i++) {
-      emitterClocks[i] += dt;
-      if (emitterClocks[i] < EMITTER_PERIOD) continue;
-      emitterClocks[i] -= EMITTER_PERIOD;
-      const e = EMITTERS[i];
-      const x = e.cx + e.ax * Math.sin(t * e.fx * 6.2832 + e.px);
-      const y = e.cy + e.ay * Math.cos(t * e.fy * 6.2832 + e.py);
-      // The kick direction sweeps independently of the path, so successive
-      // kicks from one emitter fan around rather than pushing the same way —
-      // which is what deposits vorticity instead of a steady current.
-      const angle = t * e.fr + e.px;
-      splat(x, y, Math.cos(angle) * EMITTER_IMPULSE, Math.sin(angle) * EMITTER_IMPULSE, EMITTER_DYE);
-    }
-  }
-
   // ── Sizing ───────────────────────────────────────────────────────────────
   // Cap the device pixel ratio: the dye field is upsampled anyway, so a 3x
   // backing store costs fill rate for no visible gain.
@@ -591,7 +707,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     const dt = Math.min((now - lastTime) / 1000, 0.0166);
     lastTime = now;
     resize();
-    stir(dt, now / 1000);
+    inflow(dt, now / 1000);
     step(dt);
     render();
     rafId = requestAnimationFrame(frame);
@@ -628,7 +744,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   {
     const warmSteps = compact ? 80 : WARMUP_STEPS;
     for (let i = 0; i < warmSteps; i++) {
-      stir(WARMUP_DT, i * WARMUP_DT);
+      inflow(WARMUP_DT, i * WARMUP_DT);
       step(WARMUP_DT);
     }
     // Paint the warmed state immediately rather than waiting for the first
