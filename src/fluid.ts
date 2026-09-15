@@ -61,10 +61,22 @@ const VELOCITY_DISSIPATION = 0.06; // how fast the motion dies down
 const PRESSURE_DISSIPATION = 0.8;
 const PRESSURE_ITERATIONS = 20;
 const CURL = 30; // vorticity confinement strength
+// Ceilings that keep the simulation bounded no matter what is thrown at it.
+// CURL_CAP bounds the confinement feedback; SPEED_CAP bounds the velocity
+// field itself, at a few times the inflow speed.
+const CURL_CAP = 900;
+const SPEED_CAP = 520;
 // Gaussian falloff denominator, in normalised-UV units squared. Small changes
 // here matter a lot: this is what separates thin wisps from billowing smoke.
 const SPLAT_RADIUS = 0.30;
-const SPLAT_FORCE = 5200;
+// Pointer forcing. SPLAT_FORCE converts cursor travel (in screen fractions)
+// into velocity; MAX_POINTER_IMPULSE is the hard cap on what one frame can
+// inject, which is what actually keeps a fast flick from destabilising the
+// channel. POINTER_DYE is deliberately small — the cursor is there to stir
+// the smoke that is already flowing, not to paint new smoke into the frame.
+const SPLAT_FORCE = 1400;
+const MAX_POINTER_IMPULSE = 260;
+const POINTER_DYE = 0.09;
 
 // ── Channel ─────────────────────────────────────────────────────────────────
 const INLET_SPEED = 130; // sim units; well inside the CFL limit
@@ -180,6 +192,8 @@ in vec2 vUv; in vec2 vL; in vec2 vR; in vec2 vT; in vec2 vB;
 uniform sampler2D uVelocity;
 uniform sampler2D uCurl;
 uniform float curl;
+uniform float curlCap;
+uniform float speedCap;
 uniform float dt;
 out vec4 fragColor;
 void main () {
@@ -190,11 +204,17 @@ void main () {
   float C = texture(uCurl, vUv).x;
   vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
   force /= length(force) + 0.0001;
-  force *= curl * C;
+  // Confinement adds energy in proportion to the vorticity already there, so
+  // it is a positive feedback loop: a strong eddy makes itself stronger. Left
+  // uncapped, one hard flick of the cursor is enough to make it run away.
+  force *= clamp(curl * C, -curlCap, curlCap);
   force.y *= -1.0;
   vec2 velocity = texture(uVelocity, vUv).xy;
   velocity += force * dt;
-  velocity = min(max(velocity, -1000.0), 1000.0);
+  // Hard ceiling on speed. The previous 1000 was ~17 cells of travel per step
+  // at 60fps — far more headroom than any part of this flow needs, and enough
+  // for a disturbance to persist long after it should have washed downstream.
+  velocity = clamp(velocity, -speedCap, speedCap);
   fragColor = vec4(velocity, 0.0, 1.0);
 }`;
 
@@ -575,6 +595,8 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     gl!.uniform1i(vorticityProgram.uniforms.uVelocity!, velocity.read.attach(0));
     gl!.uniform1i(vorticityProgram.uniforms.uCurl!, curlFBO.attach(1));
     gl!.uniform1f(vorticityProgram.uniforms.curl!, CURL);
+    gl!.uniform1f(vorticityProgram.uniforms.curlCap!, CURL_CAP);
+    gl!.uniform1f(vorticityProgram.uniforms.speedCap!, SPEED_CAP);
     gl!.uniform1f(vorticityProgram.uniforms.dt!, dt);
     blit(velocity.write);
     velocity.swap();
@@ -652,6 +674,16 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     return { x: (clientX - rect.left) / rect.width, y: 1 - (clientY - rect.top) / rect.height };
   }
 
+  // Pointer movement is accumulated here and applied once per frame, rather
+  // than splatted per event. A fast drag fires many pointermove events between
+  // frames, and splatting each one let a single flick inject an unbounded
+  // amount of momentum — the main cause of the runaway.
+  let pendingDX = 0;
+  let pendingDY = 0;
+  let pendingX = 0;
+  let pendingY = 0;
+  let pointerPending = false;
+
   function onPointerMove(e: PointerEvent) {
     const { x, y } = toSimCoords(e.clientX, e.clientY);
     if (!pointerActive) {
@@ -660,12 +692,31 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
       lastY = y;
       return;
     }
-    const dx = (x - lastX) * SPLAT_FORCE;
-    const dy = (y - lastY) * SPLAT_FORCE;
+    pendingDX += x - lastX;
+    pendingDY += y - lastY;
     lastX = x;
     lastY = y;
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
-    splat(x, y, dx, dy, 0.4);
+    pendingX = x;
+    pendingY = y;
+    pointerPending = true;
+  }
+
+  /** Applies one frame's worth of accumulated cursor movement, magnitude-capped. */
+  function applyPointer() {
+    if (!pointerPending) return;
+    pointerPending = false;
+    let vx = pendingDX * SPLAT_FORCE;
+    let vy = pendingDY * SPLAT_FORCE;
+    pendingDX = 0;
+    pendingDY = 0;
+    const mag = Math.hypot(vx, vy);
+    if (mag < 0.5) return;
+    if (mag > MAX_POINTER_IMPULSE) {
+      const k = MAX_POINTER_IMPULSE / mag;
+      vx *= k;
+      vy *= k;
+    }
+    splat(pendingX, pendingY, vx, vy, POINTER_DYE);
   }
 
   function onPointerLeave() {
@@ -708,6 +759,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     lastTime = now;
     resize();
     inflow(dt, now / 1000);
+    applyPointer();
     step(dt);
     render();
     rafId = requestAnimationFrame(frame);
