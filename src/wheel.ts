@@ -71,6 +71,11 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
   let lastPointerX = 0;
   let lastMoveTime = 0;
   let dragDistance = 0;
+  // Pointer capture is taken only once a drag is really under way — see
+  // onPointerMove. Capturing on pointerdown retargets the whole compatibility
+  // mouse sequence to the viewport, so the click lands on the wheel instead of
+  // the card and a card link never opens.
+  let captured = false;
   let snapTarget: number | null = null;
   let activeItem = -1;
   let rafId = 0;
@@ -205,8 +210,8 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     dragDistance = 0;
     velocity = 0;
     snapTarget = null;
+    captured = false;
     viewport.classList.add("is-dragging");
-    viewport.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -214,6 +219,14 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     const dx = e.clientX - lastPointerX;
     lastPointerX = e.clientX;
     dragDistance += Math.abs(dx);
+    // Take the capture as soon as this is unmistakably a drag rather than a
+    // click, so the pointer can leave the viewport mid-drag without the wheel
+    // losing track of it — but a plain click never captures, and so still
+    // reaches the card underneath.
+    if (!captured && dragDistance > 4 && pointerId !== null) {
+      viewport.setPointerCapture(pointerId);
+      captured = true;
+    }
     const now = performance.now();
     const dt = Math.max(now - lastMoveTime, 1);
     lastMoveTime = now;
@@ -229,7 +242,10 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     dragging = false;
     pointerId = null;
     viewport.classList.remove("is-dragging");
-    if (viewport.hasPointerCapture(e.pointerId)) viewport.releasePointerCapture(e.pointerId);
+    if (captured && viewport.hasPointerCapture(e.pointerId)) {
+      viewport.releasePointerCapture(e.pointerId);
+    }
+    captured = false;
     if (Math.abs(velocity) < 0.12) beginSnap();
   }
 
