@@ -310,7 +310,12 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     const rect = viewport.getBoundingClientRect();
     el.style.transform =
       `translate(${e.clientX - rect.left}px, ${e.clientY - rect.top}px) translate(-50%, -50%)`;
-    viewport.classList.add("has-cursor");
+    // Over a card, the pill gives way to the ordinary pointer: there the card
+    // is the target, not the wheel. During a drag it stays up regardless —
+    // pointer capture retargets events to the viewport anyway, but being
+    // explicit stops the pill flickering as cards pass under the cursor.
+    const overCard = !dragging && !!(e.target as HTMLElement | null)?.closest?.(".card");
+    viewport.classList.toggle("has-cursor", !overCard);
   }
 
   function onCursorLeave() {

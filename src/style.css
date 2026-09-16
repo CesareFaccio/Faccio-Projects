@@ -226,6 +226,9 @@ a { color: inherit; }
 }
 
 .card {
+  /* The pill hides over a card, so the pointer showing here is what tells you
+     the card is clickable rather than draggable. */
+  cursor: default;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -242,6 +245,7 @@ a { color: inherit; }
   user-select: none;
   transition: border-color 0.25s ease, background 0.25s ease;
 }
+a.card { cursor: pointer; }
 .wheel__slot.is-active .card { border-color: var(--border-bright); }
 .card:hover { border-color: var(--accent); }
 .card--planned:hover { border-color: var(--border-bright); }
