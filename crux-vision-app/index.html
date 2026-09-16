@@ -3,38 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BetaScope</title>
+  <title>Crux Vision — Cesare Faccio</title>
+  <meta name="description" content="Crux Vision — pose tracking, hold detection and biomechanical force analysis for climbing video, computed entirely in your browser." />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
+  <header class="site-head">
+    <a class="wordmark" href="../">CF</a>
+    <nav class="site-nav">
+      <a href="../">Projects</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
   <main>
-    <div class="nav-row">
-      <a class="back" href="../">&larr; projects</a>
-      <a class="back" href="how-it-works.html">How this works &rarr;</a>
-    </div>
-    <h1>BetaScope</h1>
-    <p class="tagline">Pose tracking, hold detection and biomechanical force analysis for climbing video — computed entirely in your browser. Nothing is ever uploaded anywhere.</p>
+    <section class="page-head">
+      <p class="eyebrow">Computer vision &middot; In progress</p>
+      <h1>Crux Vision</h1>
+      <p class="tagline">Pose tracking, hold detection and biomechanical force analysis for climbing video &mdash; computed entirely in your browser. Nothing is ever uploaded anywhere.</p>
+    </section>
 
     <section class="demo-section" id="demo-section">
+      <p class="section-label">Example analysis</p>
       <video id="demo-video" class="demo-video" autoplay muted loop playsinline preload="auto"></video>
       <p class="demo-caption">
-        An example analysis. <strong>Left:</strong> the share of body weight carried by each hand and foot,
+        <strong>Left:</strong> the share of body weight carried by each hand and foot,
         with limb segments coloured by axial force and gauges for the centre of mass&rsquo;s velocity and acceleration.
         <strong>Right:</strong> the climb itself, overlaid with the tracked skeleton, the holds it detected, and the centre of mass.
       </p>
     </section>
 
     <section class="upload-section">
-      <h2 class="section-heading">Analyse your own climb</h2>
+      <p class="section-label">Analyse your own climb</p>
       <p class="section-intro">
-        Everything below runs on your own device. The first video takes a minute or two — the pose model
+        Everything below runs on your own device. The first video takes a minute or two &mdash; the pose model
         (about 43&nbsp;MB) downloads once, then every frame is processed locally.
       </p>
 
       <div id="format-note" class="support-badge">
         Works with H.264-encoded video (MP4/MOV). If this was recorded on an iPhone, check
-        Settings &gt; Camera &gt; Formats is set to "Most Compatible", not "High Efficiency" —
-        HEVC video can't be played by most browsers.
+        Settings &gt; Camera &gt; Formats is set to &ldquo;Most Compatible&rdquo;, not &ldquo;High Efficiency&rdquo; &mdash;
+        HEVC video can&rsquo;t be played by most browsers.
       </div>
 
       <div id="dropzone" class="dropzone">
@@ -55,8 +65,10 @@
 
       <div id="result" class="result" hidden>
         <canvas id="preview-canvas" class="preview-canvas"></canvas>
-        <button id="download-json" class="download-btn" hidden>Download pose_data.json</button>
-        <button id="download-video" class="download-btn" hidden>Download video with overlay</button>
+        <div class="result__actions">
+          <button id="download-json" class="download-btn" hidden>Download pose_data.json</button>
+          <button id="download-video" class="download-btn" hidden>Download video with overlay</button>
+        </div>
       </div>
 
       <details id="analysis-settings" class="analysis-settings" hidden>
@@ -75,7 +87,7 @@
           <label>
             Velocity threshold
             <input id="opt-velocity-threshold" type="number" step="0.0005" min="0" />
-            <span class="settings-hint">Normalized movement per frame still counted as "still". Lower = stricter.</span>
+            <span class="settings-hint">Normalized movement per frame still counted as &ldquo;still&rdquo;. Lower = stricter.</span>
           </label>
           <label>
             Smoothing window (frames)
@@ -87,8 +99,12 @@
         <p id="settings-note" class="settings-note"></p>
       </details>
     </section>
-
   </main>
+
+  <footer class="site-foot">
+    <span>&larr; <a href="../">All projects</a></span>
+    <span>Runs entirely client-side &mdash; no video leaves your device.</span>
+  </footer>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

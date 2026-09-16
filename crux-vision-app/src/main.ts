@@ -96,10 +96,10 @@ function runAnalysis(data: PoseData, options: AnalysisOptions) {
   currentMotionByFrame = motionArr
     ? new Map(motionArr.filter((m) => m.speed_px_s !== null).map((m) => [m.frame, m]))
     : null;
-  (window as any).__betascopeAnalysis = currentAnalysis; // debugging convenience
-  (window as any).__betascopeWeight = weight; // debugging convenience
-  (window as any).__betascopeWeightByFrame = currentWeightByFrame; // debugging convenience
-  (window as any).__betascopeMotionByFrame = currentMotionByFrame; // debugging convenience
+  (window as any).__cruxVisionAnalysis = currentAnalysis; // debugging convenience
+  (window as any).__cruxVisionWeight = weight; // debugging convenience
+  (window as any).__cruxVisionWeightByFrame = currentWeightByFrame; // debugging convenience
+  (window as any).__cruxVisionMotionByFrame = currentMotionByFrame; // debugging convenience
 }
 
 /** Fills the analysis-settings inputs with the given options, converting the frame-based hold threshold to seconds for the given fps. */
@@ -268,8 +268,8 @@ async function handleFile(file: File) {
     runAnalysis(data, DEFAULT_ANALYSIS_OPTIONS);
     populateSettingsInputs(DEFAULT_ANALYSIS_OPTIONS, data.video.fps);
     activeVideoEl = result.videoElement;
-    (window as any).__betascopePoseData = data; // debugging convenience
-    (window as any).__betascopeVideoEl = activeVideoEl; // debugging convenience
+    (window as any).__cruxVisionPoseData = data; // debugging convenience
+    (window as any).__cruxVisionVideoEl = activeVideoEl; // debugging convenience
 
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
     const detectedCount = data.landmarks.filter((f) => f.detected).length;

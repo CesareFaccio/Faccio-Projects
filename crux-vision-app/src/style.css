@@ -1,0 +1,377 @@
+/* Crux Vision — shares the landing page's language: dark only, monospace,
+   one teal accent, uppercase letterspaced labels, 4px corners. Kept as its
+   own stylesheet because this is a separate Vite app with its own build. */
+
+:root {
+  --bg: #08090b;
+  --bg-raised: #101216;
+  --bg-card: #101216;
+  --border: #23262c;
+  --border-bright: #363a42;
+  --text: #e9ebed;
+  --text-dim: #878e97;
+  --text-faint: #5a616a;
+  --accent: #5eead4;
+  --warn: #d3a24c;
+  --error: #e08079;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --head-h: 64px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.site-head {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--head-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(16px, 5vw, 40px);
+  background: rgba(8, 9, 11, 0.82);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.wordmark {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-decoration: none;
+}
+.site-nav { display: flex; gap: clamp(14px, 3vw, 32px); }
+.site-nav a {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+.site-nav a:hover { color: var(--text); }
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(40px, 8vh, 80px) clamp(16px, 5vw, 32px) 80px;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  font-size: 0.66rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+h1 {
+  margin: 0 0 14px;
+  font-size: clamp(2rem, 6vw, 3.2rem);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+.tagline {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}
+
+/* A hairline rule with a small uppercase label — the heading treatment used
+   for every section below the title. */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 20px;
+  font-size: 0.66rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.section-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.section-intro {
+  margin: -6px 0 22px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  max-width: 62ch;
+}
+
+.demo-section { margin-top: clamp(40px, 8vh, 72px); }
+.demo-section[hidden] { display: none; }
+.upload-section { margin-top: clamp(48px, 9vh, 88px); }
+
+/* ── Pre-rendered example analysis ────────────────────────────────────────── */
+.demo-video {
+  width: 100%;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #000;
+}
+.demo-caption {
+  margin: 14px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+.demo-caption strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ── Notes and badges ─────────────────────────────────────────────────────── */
+.support-badge,
+.backend-note {
+  padding: 12px 14px;
+  border-radius: 4px;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-bright);
+  color: var(--text-dim);
+}
+.support-badge { margin-bottom: 18px; }
+.backend-note { margin-top: 14px; }
+.support-badge.warn,
+.backend-note.warn { border-left-color: var(--warn); color: var(--warn); }
+.backend-note.error { border-left-color: var(--error); color: var(--error); }
+
+/* ── Dropzone ─────────────────────────────────────────────────────────────── */
+.dropzone {
+  border: 1px dashed var(--border-bright);
+  border-radius: 4px;
+  padding: clamp(36px, 8vw, 64px) 24px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: linear-gradient(165deg, #15181d 0%, #0c0e11 100%);
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+.dropzone p {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.dropzone:hover,
+.dropzone.drag { border-color: var(--accent); color: var(--text); }
+
+/* ── Pipeline / progress ──────────────────────────────────────────────────── */
+.pipeline-steps {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pipeline-steps[hidden] { display: none; }
+.pipeline-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  transition: color 0.18s ease;
+}
+.pipeline-steps li.active { color: var(--text); }
+.pipeline-steps li.done { color: var(--text-dim); }
+.pipeline-steps li .step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  border: 1px solid var(--border-bright);
+  border-radius: 999px;
+}
+.pipeline-steps li.active .step-icon {
+  border-color: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+.pipeline-steps li.done .step-icon {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.pipeline-steps li.done .step-icon::before { content: "\2713"; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.progress-wrap {
+  margin-top: 14px;
+  height: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.progress-wrap[hidden] { display: none; }
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+
+.status {
+  margin-top: 14px;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  min-height: 1.4em;
+}
+
+/* ── Result ───────────────────────────────────────────────────────────────── */
+.result { margin-top: 28px; }
+.result[hidden] { display: none; }
+.preview-canvas {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: block;
+  background: #000;
+}
+.result__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.download-btn {
+  padding: 10px 18px;
+  border-radius: 4px;
+  border: 1px solid var(--border-bright);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+.download-btn:hover { border-color: var(--accent); color: var(--accent); }
+.download-btn[hidden] { display: none; }
+
+/* ── Settings ─────────────────────────────────────────────────────────────── */
+.analysis-settings {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+.analysis-settings[hidden] { display: none; }
+.analysis-settings summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  user-select: none;
+  list-style: none;
+}
+/* The default disclosure triangle sits flush against the label and ignores
+   the letterspacing, so it is replaced with a +/- that matches the type. */
+.analysis-settings summary::-webkit-details-marker { display: none; }
+.analysis-settings summary::before {
+  content: "+";
+  color: var(--accent);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.analysis-settings[open] summary::before { content: "\2212"; }
+.analysis-settings summary:hover { color: var(--text); }
+.settings-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 18px;
+}
+@media (max-width: 560px) { .settings-grid { grid-template-columns: 1fr; } }
+.settings-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.settings-grid input {
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  letter-spacing: normal;
+}
+.settings-grid input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.settings-hint {
+  font-size: 0.68rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+.analysis-settings .download-btn { margin-top: 18px; }
+.settings-note {
+  margin: 12px 0 0;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  min-height: 1.2em;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.site-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 28px clamp(16px, 5vw, 56px);
+  border-top: 1px solid var(--border);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+.site-foot a { color: var(--text-dim); text-decoration: none; }
+.site-foot a:hover { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation: none !important; }
+}

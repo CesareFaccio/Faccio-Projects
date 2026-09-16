@@ -23,12 +23,12 @@ interface Project {
 // ─────────────────────────────────────────────────────────────────────────────
 const projects: Project[] = [
   {
-    name: "BetaScope",
-    mark: "Beta\nScope",
+    name: "Crux Vision",
+    mark: "Crux\nVision",
     blurb: "Climbing video analysis",
     detail:
       "Upload a climbing video and see pose tracking, hold detection and biomechanical force analysis — computed entirely in your browser, with nothing uploaded anywhere.",
-    href: "betascope/",
+    href: "crux-vision/",
     status: "in progress",
   },
   {

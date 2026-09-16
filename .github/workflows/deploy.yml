@@ -25,23 +25,23 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            betascope-app/package-lock.json
+            crux-vision-app/package-lock.json
 
       - name: Build root site
         run: |
           npm ci
           npm run build
 
-      - name: Build betascope-app
+      - name: Build crux-vision-app
         run: |
-          cd betascope-app
+          cd crux-vision-app
           npm ci
           npm run build
 
-      - name: Merge betascope-app into root build
+      - name: Merge crux-vision-app into root build
         run: |
-          mkdir -p dist/betascope
-          cp -r betascope-app/dist/. dist/betascope/
+          mkdir -p dist/crux-vision
+          cp -r crux-vision-app/dist/. dist/crux-vision/
 
       - uses: actions/upload-pages-artifact@v3
         with:
