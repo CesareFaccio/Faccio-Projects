@@ -283,8 +283,43 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     }
   }
 
+  // ── Cursor pill ──────────────────────────────────────────────────────────
+  // Mouse users get a "drag" pill tracking the cursor, in place of the arrow.
+  // Built lazily and only for a fine pointer, so touch devices never get an
+  // element they cannot use and never lose their cursor to `cursor: none`.
+  const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+  let cursorEl: HTMLElement | null = null;
+
+  function ensureCursor(): HTMLElement | null {
+    if (cursorEl || !finePointer.matches) return cursorEl;
+    cursorEl = document.createElement("div");
+    cursorEl.className = "wheel__cursor";
+    cursorEl.setAttribute("aria-hidden", "true");
+    const pill = document.createElement("div");
+    pill.className = "wheel__cursor-pill";
+    pill.innerHTML = "<span>&#8249;</span>Drag<span>&#8250;</span>";
+    cursorEl.appendChild(pill);
+    viewport.appendChild(cursorEl);
+    return cursorEl;
+  }
+
+  function onCursorMove(e: PointerEvent) {
+    if (flat || e.pointerType !== "mouse") return;
+    const el = ensureCursor();
+    if (!el) return;
+    const rect = viewport.getBoundingClientRect();
+    el.style.transform =
+      `translate(${e.clientX - rect.left}px, ${e.clientY - rect.top}px) translate(-50%, -50%)`;
+    viewport.classList.add("has-cursor");
+  }
+
+  function onCursorLeave() {
+    viewport.classList.remove("has-cursor");
+  }
+
   function onResize() {
     applyLayout();
+    if (flat) onCursorLeave();
   }
 
   viewport.addEventListener("pointerdown", onPointerDown);
@@ -294,6 +329,8 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
   viewport.addEventListener("keydown", onKeyDown);
   viewport.addEventListener("wheel", onWheelEvent, { passive: false });
   viewport.addEventListener("click", onClickCapture, true);
+  viewport.addEventListener("pointermove", onCursorMove);
+  viewport.addEventListener("pointerleave", onCursorLeave);
   window.addEventListener("resize", onResize);
 
   applyLayout();
@@ -310,6 +347,10 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
       viewport.removeEventListener("keydown", onKeyDown);
       viewport.removeEventListener("wheel", onWheelEvent);
       viewport.removeEventListener("click", onClickCapture, true);
+      viewport.removeEventListener("pointermove", onCursorMove);
+      viewport.removeEventListener("pointerleave", onCursorLeave);
+      cursorEl?.remove();
+      viewport.classList.remove("has-cursor");
       window.removeEventListener("resize", onResize);
     },
   };

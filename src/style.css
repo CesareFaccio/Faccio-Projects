@@ -196,6 +196,10 @@ a { color: inherit; }
   overflow: hidden;
   cursor: grab;
   outline: none;
+  /* The arc handles horizontal movement itself via pointer events, so the
+     browser is told to own vertical panning only — otherwise a drag across
+     the wheel scrolls the page instead of turning it. Flat mode overrides
+     this below, because there the browser IS the horizontal scroller. */
   touch-action: pan-y;
 }
 .wheel:focus-visible { box-shadow: inset 0 0 0 1px var(--border-bright); }
@@ -275,6 +279,49 @@ a { color: inherit; }
 .card__cta { margin-top: 5px; color: var(--accent); }
 .card__cta--muted { color: var(--text-faint); }
 
+/* A "drag" pill that follows the cursor across the wheel, replacing the
+   arrow. Mouse only: it is hidden in flat mode and never created for touch
+   or coarse pointers, where there is no cursor to replace. */
+.wheel__cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform;
+}
+/* Toggled with no transition, deliberately. The pill is what replaces the
+   pointer, so it must appear the instant `cursor: none` takes effect — if a
+   fade were relied on and did not run, the cursor would vanish with nothing
+   in its place. The pill's own scale animates instead, which is safe to lose. */
+.wheel.has-cursor .wheel__cursor { opacity: 1; }
+/* Only hide the real cursor once the pill is actually up, so a failure to
+   create it can never leave the pointer invisible. */
+.wheel.has-cursor { cursor: none; }
+.wheel.is-flat .wheel__cursor { display: none; }
+
+.wheel__cursor-pill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06231f;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: scale(0.88);
+  transition: transform 0.18s ease;
+}
+.wheel.has-cursor .wheel__cursor-pill { transform: scale(1); }
+.wheel.is-dragging .wheel__cursor-pill { transform: scale(0.9); }
+.wheel__cursor-pill span { opacity: 0.55; text-indent: 0; }
+
 .wheel__meta {
   max-width: 640px;
   margin: clamp(24px, 5vh, 48px) auto 0;
@@ -292,6 +339,10 @@ a { color: inherit; }
   overflow-x: auto;
   overflow-y: hidden;
   cursor: default;
+  /* Must override the arc's `pan-y`. With that in force the browser refuses
+     to pan this scroller horizontally, which left the row unswipeable on a
+     phone — the arc's rule was silently applying to the flat layout too. */
+  touch-action: pan-x pan-y;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   padding: 0 max(16px, calc(50vw - 130px));

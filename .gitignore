@@ -7,3 +7,6 @@ site-scaffold.tar.gz
 # Full-resolution master for the demo clip; the web-sized copy that ships
 # lives in betascope-app/public/demo-analysis.mp4.
 /demo_video.mp4
+
+# Vite writes these while resolving its config; they are transient.
+vite.config.ts.timestamp-*.mjs
