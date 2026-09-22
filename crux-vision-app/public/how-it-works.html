@@ -5,96 +5,142 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>How Crux Vision Works</title>
   <style>
+    /* The System 7 skin, inlined: this page is copied verbatim out of public/,
+       so it cannot share the app's bundled stylesheet. The fonts live in
+       public/fonts/ for the same reason — a hashed build asset would have no
+       stable path to point at from here. */
+    @font-face {
+      font-family: "Pixelify Sans";
+      src: url("./fonts/pixelify-sans-400.woff2") format("woff2");
+      font-weight: 400; font-display: swap;
+    }
+    @font-face {
+      font-family: "Pixelify Sans";
+      src: url("./fonts/pixelify-sans-700.woff2") format("woff2");
+      font-weight: 700; font-display: swap;
+    }
     :root {
-      --bg: #08090b;
-      --bg-raised: #101216;
-      --border: #23262c;
-      --border-bright: #363a42;
-      --text: #e9ebed;
-      --text-dim: #878e97;
-      --text-faint: #5a616a;
-      --accent: #5eead4;
-      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-      --head-h: 64px;
+      --ink: #000; --paper: #fff; --dim: #6b6b6b; --dimmer: #a8a8a8;
+      --ui: "Pixelify Sans", Chicago, "ChicagoFLF", Geneva, Verdana, sans-serif;
+      --body: Geneva, Verdana, Tahoma, "DejaVu Sans", sans-serif;
+      --shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--mono);
-      line-height: 1.65;
-      -webkit-font-smoothing: antialiased;
+      margin: 0; min-height: 100vh; color: var(--ink);
+      font-family: var(--body); font-size: 13px; line-height: 1.7;
+      background-color: #9a9a9a;
+      background-image: repeating-conic-gradient(#8a8a8a 0% 25%, #b6b6b6 0% 50%);
+      background-size: 4px 4px;
     }
     a { color: inherit; }
-    .site-head {
-      position: sticky; top: 0; z-index: 50; height: var(--head-h);
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 clamp(16px, 5vw, 40px);
-      background: rgba(8, 9, 11, 0.82); backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--border);
+    .menubar, .win__bar, .win__status, .deskfoot, h1, h2 {
+      font-family: var(--ui); -webkit-font-smoothing: none; font-smooth: never;
     }
-    .wordmark { font-size: 0.9rem; font-weight: 700; letter-spacing: 0.28em; text-decoration: none; }
-    .site-nav { display: flex; gap: clamp(14px, 3vw, 32px); }
-    .site-nav a {
-      font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase;
-      text-decoration: none; color: var(--text-dim); transition: color 0.2s ease;
+    .menubar {
+      position: sticky; top: 0; z-index: 500; height: 24px;
+      display: flex; align-items: stretch; padding: 0 4px;
+      background: var(--paper); border-bottom: 1px solid var(--ink);
+      font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden;
     }
-    .site-nav a:hover { color: var(--text); }
-    main {
-      max-width: 760px; margin: 0 auto;
-      padding: clamp(40px, 8vh, 80px) clamp(16px, 5vw, 32px) 80px;
+    .menubar__item {
+      display: flex; align-items: center; padding: 0 10px;
+      text-decoration: none; color: var(--ink);
     }
-    .eyebrow {
-      margin: 0 0 14px; font-size: 0.66rem; letter-spacing: 0.24em;
-      text-transform: uppercase; color: var(--accent);
+    a.menubar__item:hover { background: var(--ink); color: var(--paper); }
+    .menubar__item.is-disabled { color: var(--dimmer); }
+    .menubar__gap { flex: 1; }
+    .menubar__mark {
+      align-self: center; width: 11px; height: 11px; margin: 0 10px 0 6px;
+      background: var(--ink);
+      clip-path: polygon(50% 0, 62% 38%, 100% 38%, 70% 62%, 82% 100%, 50% 76%, 18% 100%, 30% 62%, 0 38%, 38% 38%);
     }
-    h1 {
-      margin: 0 0 14px; font-size: clamp(1.8rem, 5vw, 2.8rem); font-weight: 600;
-      line-height: 1.05; letter-spacing: -0.04em; text-transform: uppercase;
+    .desktop { max-width: 820px; margin: 0 auto; padding: clamp(14px, 2.5vw, 34px); }
+    .win {
+      border: 1px solid var(--ink); background: var(--paper); box-shadow: var(--shadow);
     }
-    .tagline { margin: 0 0 8px; max-width: 62ch; font-size: 0.86rem; color: var(--text-dim); }
+    .win__bar {
+      display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 5px;
+      border-bottom: 1px solid var(--ink);
+      background: repeating-linear-gradient(to bottom, var(--ink) 0 1px, var(--paper) 1px 2px);
+      user-select: none;
+    }
+    .win__close, .win__zoom {
+      flex: 0 0 auto; width: 11px; height: 11px;
+      border: 1px solid var(--ink); background: var(--paper);
+    }
+    .win__zoom { position: relative; }
+    .win__zoom::after {
+      content: ""; position: absolute; inset: 0 auto auto 0; width: 6px; height: 6px;
+      border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+    }
+    .win__title { flex: 1; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+    .win__title > span {
+      max-width: 100%; padding: 0 10px; background: var(--paper);
+      font-size: 12px; font-weight: 700; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .win__body { padding: clamp(18px, 3vw, 30px); }
+    .win__status {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 4px 9px; border-top: 1px solid var(--ink);
+      font-size: 11px; min-height: 22px;
+    }
+    .win__status a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .win__status a:hover { background: var(--ink); color: var(--paper); }
+
+    h1 { margin: 0 0 14px; font-size: clamp(1.5rem, 4.5vw, 2.1rem); font-weight: 700; line-height: 1.08; }
+    .tagline { margin: 0; max-width: 64ch; font-size: 12.5px; }
+    /* Section heads are set as a label above a rule, the way a System 7 dialog
+       divided its groups. */
     h2 {
-      display: flex; align-items: center; gap: 14px;
-      margin: clamp(40px, 7vh, 64px) 0 18px;
-      font-size: 0.66rem; font-weight: 400; letter-spacing: 0.24em;
-      text-transform: uppercase; color: var(--text-faint);
+      margin: clamp(30px, 5vh, 44px) 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--ink);
+      font-size: 12px; font-weight: 700;
     }
-    h2::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-    p, li { font-size: 0.82rem; color: var(--text-dim); }
-    p { margin: 0 0 14px; }
-    ul { margin: 0; padding-left: 18px; }
+    p { margin: 0 0 14px; max-width: 68ch; }
+    ul { margin: 0; padding-left: 20px; max-width: 68ch; }
     li { margin-bottom: 12px; }
-    li::marker { color: var(--border-bright); }
-    strong { color: var(--text); font-weight: 500; }
+    li::marker { color: var(--dimmer); }
+    strong { font-weight: 700; }
     .note {
-      margin-top: 40px; padding: 14px 16px; border-radius: 4px; font-size: 0.76rem;
-      background: var(--bg-raised); border: 1px solid var(--border);
-      border-left: 2px solid var(--accent); color: var(--text-dim);
+      margin-top: 30px; padding: 12px 14px;
+      border: 1px solid var(--ink); border-left-width: 4px;
+      background: #f2f2f2; font-size: 12px; max-width: 68ch;
     }
-    .site-foot {
+    .deskfoot {
       display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-      padding: 28px clamp(16px, 5vw, 56px); border-top: 1px solid var(--border);
-      font-size: 0.68rem; letter-spacing: 0.08em; color: var(--text-faint);
+      max-width: 820px; margin: 0 auto;
+      padding: 0 clamp(14px, 2.5vw, 34px) 26px;
+      font-size: 10.5px; color: #3c3c3c;
     }
-    .site-foot a { color: var(--text-dim); text-decoration: none; }
-    .site-foot a:hover { color: var(--accent); }
+    .deskfoot a { text-decoration: none; }
+    .deskfoot a:hover { background: var(--ink); color: var(--paper); }
   </style>
 </head>
 <body>
-  <header class="site-head">
-    <a class="wordmark" href="../">CF</a>
-    <nav class="site-nav">
-      <a href="../">Projects</a>
-      <a href="./">Crux Vision</a>
-      <a href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
-    </nav>
-  </header>
+  <div class="menubar">
+    <a class="menubar__mark" href="../" aria-label="Back to projects"></a>
+    <span class="menubar__item is-disabled">File</span>
+    <span class="menubar__item is-disabled">Edit</span>
+    <span class="menubar__item is-disabled">Special</span>
+    <span class="menubar__gap"></span>
+    <a class="menubar__item" href="../">Projects</a>
+    <a class="menubar__item" href="./">Crux Vision</a>
+    <a class="menubar__item" href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
+  </div>
 
-  <main>
-    <p class="eyebrow">Crux Vision</p>
-    <h1>How it works</h1>
-    <p class="tagline">The short version: your video never leaves your device. Everything below — reading the video, finding your body, and doing the math — happens right there in your browser.</p>
+  <main class="desktop">
+    <div class="win">
+      <div class="win__bar">
+        <i class="win__close" aria-hidden="true"></i>
+        <span class="win__title"><span>How Crux Vision Works</span></span>
+        <i class="win__zoom" aria-hidden="true"></i>
+      </div>
+      <div class="win__body">
+        <h1>How it works</h1>
+<p class="tagline">The short version: your video never leaves your device. Everything below — reading the video, finding your body, and doing the math — happens right there in your browser.</p>
 
     <h2>Finding your body in the video</h2>
     <p>Crux Vision steps through your video about 60 times a second and, for each of those frames, runs a small AI model that looks for a person and marks 33 points on their body — wrists, elbows, shoulders, hips, knees, ankles, and more. This is the same kind of pose-tracking technology behind phone AR filters and fitness apps (it's called MediaPipe, built by Google) — Crux Vision just points it at your climbing footage, one frame at a time, and keeps the results for every frame.</p>
@@ -114,9 +160,16 @@
     <p>That's possible thanks to a browser technology called <strong>WebAssembly</strong>, which lets software originally built for serious number-crunching run at near-native speed directly inside a web page — no installing anything, no plugins. It's the same reason Crux Vision can be free to use: there's no server doing the work behind the scenes, so there's no compute cost per visitor. The trade-off is that a longer video takes longer to process on your device than it would on a powerful cloud server — a fair swap for keeping everything free and private.</p>
 
     <div class="note"><strong>A quick honest note:</strong> Crux Vision runs a compact AI model for free in your browser rather than lab-grade motion-capture equipment, so tracking is very good but not perfectly precise — small wobbles in the numbers are normal and don't mean anything's wrong.</div>
+      </div>
+      <div class="win__status">
+        <span>Crux Vision</span>
+        <span><a href="./">Back to Crux Vision</a></span>
+      </div>
+    </div>
   </main>
-  <footer class="site-foot">
-    <span>&larr; <a href="./">Back to Crux Vision</a></span>
+
+  <footer class="deskfoot">
+    <span><a href="../">&larr; All projects</a></span>
     <span>Runs entirely client-side &mdash; no video leaves your device.</span>
   </footer>
 </body>

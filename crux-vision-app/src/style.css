@@ -1,21 +1,38 @@
-/* Crux Vision — shares the landing page's language: dark only, monospace,
-   one teal accent, uppercase letterspaced labels, 4px corners. Kept as its
-   own stylesheet because this is a separate Vite app with its own build. */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Crux Vision — the same System 7 skin as the landing page.
+
+   Kept as its own stylesheet because this is a separate Vite app with its own
+   build; the tokens, chrome and type scale below are deliberately identical to
+   ../../src/style.css, so a change to one wants the same change to the other.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./fonts/pixelify-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./fonts/pixelify-sans-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  --bg: #08090b;
-  --bg-raised: #101216;
-  --bg-card: #101216;
-  --border: #23262c;
-  --border-bright: #363a42;
-  --text: #e9ebed;
-  --text-dim: #878e97;
-  --text-faint: #5a616a;
-  --accent: #5eead4;
-  --warn: #d3a24c;
-  --error: #e08079;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --head-h: 64px;
+  --ink: #000;
+  --paper: #fff;
+  --dim: #6b6b6b;
+  --dimmer: #a8a8a8;
+
+  --ui: "Pixelify Sans", Chicago, "ChicagoFLF", Geneva, Verdana, sans-serif;
+  --body: Geneva, Verdana, Tahoma, "DejaVu Sans", sans-serif;
+
+  --menu-h: 24px;
+  --bar-h: 20px;
+  --shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
 }
 
 * { box-sizing: border-box; }
@@ -24,237 +41,279 @@ html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--mono);
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 13px;
   line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
+  background-color: #9a9a9a;
+  background-image: repeating-conic-gradient(#8a8a8a 0% 25%, #b6b6b6 0% 50%);
+  background-size: 4px 4px;
 }
 
 a { color: inherit; }
 
-/* ── Header ───────────────────────────────────────────────────────────────── */
-.site-head {
+/* Pixel type wants no smoothing — the point is visible square pixels. */
+.menubar,
+.win__bar,
+.win__status,
+.deskfoot,
+.btn,
+h1,
+.dropzone p,
+.pipeline-steps,
+.status,
+.panel summary,
+.settings-grid label {
+  font-family: var(--ui);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* ── Menu bar ─────────────────────────────────────────────────────────────── */
+.menubar {
   position: sticky;
   top: 0;
-  z-index: 50;
-  height: var(--head-h);
+  z-index: 500;
+  height: var(--menu-h);
+  display: flex;
+  align-items: stretch;
+  padding: 0 4px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.menubar__item {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+a.menubar__item:hover { background: var(--ink); color: var(--paper); }
+.menubar__item.is-disabled { color: var(--dimmer); }
+.menubar__gap { flex: 1; }
+.menubar__mark {
+  align-self: center;
+  width: 11px;
+  height: 11px;
+  margin: 0 10px 0 6px;
+  background: var(--ink);
+  clip-path: polygon(50% 0, 62% 38%, 100% 38%, 70% 62%, 82% 100%, 50% 76%, 18% 100%, 30% 62%, 0 38%, 38% 38%);
+}
+
+/* ── Windows ──────────────────────────────────────────────────────────────── */
+.desktop {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: clamp(14px, 2.5vw, 34px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(18px, 3.5vh, 36px);
+}
+
+.win {
+  position: relative;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.win.is-front { z-index: 20; }
+
+.win__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--bar-h);
+  padding: 0 5px;
+  border-bottom: 1px solid var(--ink);
+  background: repeating-linear-gradient(to bottom, var(--ink) 0 1px, var(--paper) 1px 2px);
+  cursor: default;
+  user-select: none;
+  touch-action: none;
+}
+.win__close,
+.win__zoom {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+.win__zoom { position: relative; }
+.win__zoom::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+.win__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+.win__title > span {
+  max-width: 100%;
+  padding: 0 10px;
+  background: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win__body { padding: clamp(16px, 2.5vw, 24px); }
+
+.win__status {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 clamp(16px, 5vw, 40px);
-  background: rgba(8, 9, 11, 0.82);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  padding: 4px 9px;
+  border-top: 1px solid var(--ink);
+  font-size: 11px;
+  background: var(--paper);
+  min-height: 22px;
 }
-.wordmark {
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.28em;
-  text-decoration: none;
-}
-.site-nav { display: flex; gap: clamp(14px, 3vw, 32px); }
-.site-nav a {
-  font-size: 0.68rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--text-dim);
-  transition: color 0.2s ease;
-}
-.site-nav a:hover { color: var(--text); }
+.win__status-right { color: var(--dim); }
+.win__status a { text-decoration: none; border-bottom: 1px solid currentColor; }
+.win__status a:hover { background: var(--ink); color: var(--paper); }
 
-/* ── Layout ───────────────────────────────────────────────────────────────── */
-main {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: clamp(40px, 8vh, 80px) clamp(16px, 5vw, 32px) 80px;
-}
-
-.eyebrow {
-  margin: 0 0 14px;
-  font-size: 0.66rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
+/* ── Type ─────────────────────────────────────────────────────────────────── */
 h1 {
-  margin: 0 0 14px;
-  font-size: clamp(2rem, 6vw, 3.2rem);
-  font-weight: 600;
-  line-height: 1.02;
-  letter-spacing: -0.04em;
-  text-transform: uppercase;
+  margin: 0 0 12px;
+  font-size: clamp(1.6rem, 5vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1.05;
 }
-.tagline {
+.tagline,
+.section-intro {
   margin: 0;
   max-width: 62ch;
-  font-size: 0.86rem;
-  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.7;
 }
+.section-intro { margin-bottom: 20px; }
 
-/* A hairline rule with a small uppercase label — the heading treatment used
-   for every section below the title. */
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0 0 20px;
-  font-size: 0.66rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+/* ── Notes ────────────────────────────────────────────────────────────────── */
+/* A System 7 alert put its message beside an icon inside a boxed panel; this is
+   the flattened version of that — an inset box with a heavy left rule. */
+.note {
+  margin-bottom: 18px;
+  padding: 11px 13px;
+  border: 1px solid var(--ink);
+  border-left-width: 4px;
+  font-size: 12px;
+  line-height: 1.65;
+  background: #f2f2f2;
 }
-.section-label::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.section-intro {
-  margin: -6px 0 22px;
-  font-size: 0.82rem;
-  color: var(--text-dim);
-  max-width: 62ch;
-}
-
-.demo-section { margin-top: clamp(40px, 8vh, 72px); }
-.demo-section[hidden] { display: none; }
-.upload-section { margin-top: clamp(48px, 9vh, 88px); }
-
-/* ── Pre-rendered example analysis ────────────────────────────────────────── */
-.demo-video {
-  width: 100%;
-  display: block;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: #000;
-}
-.demo-caption {
+.note[hidden] { display: none; }
+.note--error {
   margin: 14px 0 0;
-  font-size: 0.76rem;
-  line-height: 1.6;
-  color: var(--text-dim);
+  /* Diagonal hatching reads as "attention" without reaching for colour. */
+  background: repeating-linear-gradient(45deg, #fff 0 4px, #e4e4e4 4px 8px);
 }
-.demo-caption strong {
-  color: var(--text);
-  font-weight: 500;
-}
-
-/* ── Notes and badges ─────────────────────────────────────────────────────── */
-.support-badge,
-.backend-note {
-  padding: 12px 14px;
-  border-radius: 4px;
-  font-size: 0.74rem;
-  line-height: 1.6;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--border-bright);
-  color: var(--text-dim);
-}
-.support-badge { margin-bottom: 18px; }
-.backend-note { margin-top: 14px; }
-.support-badge.warn,
-.backend-note.warn { border-left-color: var(--warn); color: var(--warn); }
-.backend-note.error { border-left-color: var(--error); color: var(--error); }
 
 /* ── Dropzone ─────────────────────────────────────────────────────────────── */
 .dropzone {
-  border: 1px dashed var(--border-bright);
-  border-radius: 4px;
-  padding: clamp(36px, 8vw, 64px) 24px;
+  border: 2px dashed var(--ink);
+  padding: clamp(32px, 7vw, 56px) 24px;
   text-align: center;
   cursor: pointer;
-  color: var(--text-dim);
-  background: linear-gradient(165deg, #15181d 0%, #0c0e11 100%);
-  transition: border-color 0.18s ease, color 0.18s ease;
+  background: var(--paper);
 }
 .dropzone p {
   margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
 }
-.dropzone:hover,
-.dropzone.drag { border-color: var(--accent); color: var(--text); }
+.dropzone:hover { background: #f2f2f2; }
+/* A file dragged over it is "selected", and selection is an inversion. */
+.dropzone.drag { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
-/* ── Pipeline / progress ──────────────────────────────────────────────────── */
+/* ── Pipeline and progress ────────────────────────────────────────────────── */
 .pipeline-steps {
   list-style: none;
-  margin: 22px 0 0;
+  margin: 20px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+  font-size: 11.5px;
 }
 .pipeline-steps[hidden] { display: none; }
 .pipeline-steps li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  transition: color 0.18s ease;
+  gap: 9px;
+  color: var(--dimmer);
 }
-.pipeline-steps li.active { color: var(--text); }
-.pipeline-steps li.done { color: var(--text-dim); }
+.pipeline-steps li.active { color: var(--ink); font-weight: 700; }
+.pipeline-steps li.done { color: var(--dim); }
 .pipeline-steps li .step-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
-  font-size: 0.6rem;
-  border: 1px solid var(--border-bright);
-  border-radius: 999px;
+  font-size: 9px;
+  line-height: 1;
+  border: 1px solid currentColor;
 }
 .pipeline-steps li.active .step-icon {
-  border-color: var(--accent);
-  animation: pulse 1s ease-in-out infinite;
+  border-color: var(--ink);
+  animation: blink 1s steps(2, start) infinite;
 }
 .pipeline-steps li.done .step-icon {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--bg);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
 }
 .pipeline-steps li.done .step-icon::before { content: "\2713"; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes blink { 50% { background: var(--ink); } }
 
+/* The System 7 thermometer: a boxed bar filled with a hatched pattern. */
 .progress-wrap {
   margin-top: 14px;
-  height: 2px;
-  background: var(--border);
+  height: 14px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
   overflow: hidden;
 }
 .progress-wrap[hidden] { display: none; }
 .progress-bar {
   height: 100%;
   width: 0%;
-  background: var(--accent);
-  transition: width 0.15s ease;
+  background: repeating-linear-gradient(45deg, var(--ink) 0 3px, #fff 3px 6px);
+  transition: width 0.15s linear;
 }
 
 .status {
   margin-top: 14px;
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
+  font-size: 11.5px;
+  color: var(--dim);
   min-height: 1.4em;
 }
 
 /* ── Result ───────────────────────────────────────────────────────────────── */
-.result { margin-top: 28px; }
+.result { margin-top: 24px; }
 .result[hidden] { display: none; }
 .preview-canvas {
-  max-width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 4px;
   display: block;
-  background: #000;
+  max-width: 100%;
+  border: 1px solid var(--ink);
+  background: var(--paper);
 }
 .result__actions {
   display: flex;
@@ -263,54 +322,69 @@ h1 {
   margin-top: 16px;
 }
 
-.download-btn {
-  padding: 10px 18px;
-  border-radius: 4px;
-  border: 1px solid var(--border-bright);
-  background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.66rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color 0.18s ease, color 0.18s ease;
+.demo-video {
+  width: 100%;
+  display: block;
+  border: 1px solid var(--ink);
+  background: #000;
 }
-.download-btn:hover { border-color: var(--accent); color: var(--accent); }
-.download-btn[hidden] { display: none; }
+.demo-caption {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--dim);
+}
+.demo-caption strong { color: var(--ink); font-weight: 700; }
 
-/* ── Settings ─────────────────────────────────────────────────────────────── */
-.analysis-settings {
-  margin-top: 20px;
-  padding: 16px 18px;
-  border-radius: 4px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-}
-.analysis-settings[hidden] { display: none; }
-.analysis-settings summary {
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 5px 16px;
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-decoration: none;
   cursor: pointer;
+}
+.btn:hover { background: #ececec; }
+.btn:active { background: var(--ink); color: var(--paper); }
+.btn[hidden] { display: none; }
+/* System 7 ringed the default button so Return had an obvious target. */
+.btn--default { margin: 3px; box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+
+/* ── Settings panel ───────────────────────────────────────────────────────── */
+.panel {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--ink);
+  background: #f2f2f2;
+}
+.panel[hidden] { display: none; }
+.panel summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.66rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  user-select: none;
+  gap: 9px;
   list-style: none;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  user-select: none;
 }
-/* The default disclosure triangle sits flush against the label and ignores
-   the letterspacing, so it is replaced with a +/- that matches the type. */
-.analysis-settings summary::-webkit-details-marker { display: none; }
-.analysis-settings summary::before {
-  content: "+";
-  color: var(--accent);
-  font-size: 0.8rem;
-  line-height: 1;
+/* The native triangle sits flush against the label and ignores the pixel
+   grid, so it is replaced with a square that fills when the panel is open. */
+.panel summary::-webkit-details-marker { display: none; }
+.panel summary::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
 }
-.analysis-settings[open] summary::before { content: "\2212"; }
-.analysis-settings summary:hover { color: var(--text); }
+.panel[open] summary::before { background: var(--ink); }
+
 .settings-grid {
   margin-top: 18px;
   display: grid;
@@ -322,54 +396,51 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 0.66rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
 }
 .settings-grid input {
-  padding: 8px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.8rem;
-  letter-spacing: normal;
+  padding: 4px 6px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 12px;
 }
-.settings-grid input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
+.settings-grid input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
 .settings-hint {
-  font-size: 0.68rem;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--text-faint);
+  font-family: var(--body);
+  font-size: 11.5px;
+  font-weight: 400;
   line-height: 1.5;
+  color: var(--dim);
 }
-.analysis-settings .download-btn { margin-top: 18px; }
+.panel .btn { margin-top: 18px; }
 .settings-note {
   margin: 12px 0 0;
-  font-size: 0.7rem;
-  color: var(--text-faint);
+  font-size: 11.5px;
+  color: var(--dim);
   min-height: 1.2em;
 }
 
-/* ── Footer ───────────────────────────────────────────────────────────────── */
-.site-foot {
+/* ── Desktop footer ───────────────────────────────────────────────────────── */
+.deskfoot {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 28px clamp(16px, 5vw, 56px);
-  border-top: 1px solid var(--border);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 clamp(14px, 2.5vw, 34px) 26px;
+  font-size: 10.5px;
+  color: #3c3c3c;
 }
-.site-foot a { color: var(--text-dim); text-decoration: none; }
-.site-foot a:hover { color: var(--accent); }
+.deskfoot a { text-decoration: none; }
+.deskfoot a:hover { background: var(--ink); color: var(--paper); }
+
+@media (max-width: 599px) {
+  .menubar__item.is-disabled { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

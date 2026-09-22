@@ -6,6 +6,7 @@ import { computeWeightDistribution } from "./forces";
 import { computeMotion } from "./motion";
 import type { MotionFrameEntry } from "./motion";
 import { buildSmoothedWeightByFrame, renderPlusOverlay } from "./plusRender";
+import { makeWindowsDraggable } from "./windows";
 import type { SmoothedWeightFrame } from "./plusRender";
 
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
@@ -499,3 +500,6 @@ function startDemo() {
 }
 
 startDemo();
+
+// The desktop's windows can be dragged by their title bars.
+makeWindowsDraggable(document);

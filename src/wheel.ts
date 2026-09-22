@@ -146,7 +146,9 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
       }
       // Cards more than a few steps out are round the rim and mostly decorative.
       const dim = Math.min(offset / 3.2, 1);
-      slots[i].style.opacity = String(1 - dim * 0.78);
+      // Only a partial fade: these cards are white-on-grey now, and at the old
+      // 0.78 the outermost ones disappeared into the desktop entirely.
+      slots[i].style.opacity = String(1 - dim * 0.55);
       slots[i].style.zIndex = String(100 - Math.round(offset * 10));
       slots[i].classList.toggle("is-active", false);
     }

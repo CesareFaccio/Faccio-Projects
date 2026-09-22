@@ -1,17 +1,46 @@
-/* Dark, monochrome, monospace — the hero's fluid simulation is the only
-   colour event on the page, so everything else stays out of its way. */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Classic-Mac (System 7) skin.
+
+   The whole page is one black-and-white desktop: 1px black outlines, pinstriped
+   title bars, hard drop shadows, and no colour anywhere. "Highlighted" means
+   inverted — black fill, white text — exactly as it did in 1991, which is why
+   there is no accent hue in the token list below.
+
+   Two typefaces stand in for the originals: Pixelify Sans for chrome and
+   headings (where System 7 used Chicago) and Geneva — still installed on every
+   Mac, with Verdana/Tahoma behind it elsewhere — for running text.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./fonts/pixelify-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./fonts/pixelify-sans-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  --bg: #08090b;
-  --bg-raised: #101216;
-  --border: #23262c;
-  --border-bright: #363a42;
-  --text: #e9ebed;
-  --text-dim: #878e97;
-  --text-faint: #5a616a;
-  --accent: #5eead4;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --head-h: 64px;
+  --ink: #000;
+  --paper: #fff;
+  /* --dim is readable secondary text; --dimmer is the Finder's greyed-out
+     state, where being hard to read is the message. */
+  --dim: #6b6b6b;
+  --dimmer: #a8a8a8;
+
+  --ui: "Pixelify Sans", Chicago, "ChicagoFLF", Geneva, Verdana, sans-serif;
+  --body: Geneva, Verdana, Tahoma, "DejaVu Sans", sans-serif;
+
+  --menu-h: 24px;
+  --bar-h: 20px;
+  /* The hard offset shadow under every window and card. */
+  --shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
 }
 
 * { box-sizing: border-box; }
@@ -20,158 +49,261 @@ html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--mono);
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 13px;
   line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
+  /* The System 7 desktop: a 50% dither. Two greys rather than pure black and
+     white, which at this size would shimmer on a high-density display. */
+  background-color: #9a9a9a;
+  background-image: repeating-conic-gradient(#8a8a8a 0% 25%, #b6b6b6 0% 50%);
+  background-size: 4px 4px;
   overflow-x: hidden;
 }
 
 a { color: inherit; }
 
-/* ── Header ───────────────────────────────────────────────────────────────── */
-.site-head {
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: var(--head-h);
-  z-index: 50;
+/* Pixel type wants no smoothing — the point is visible square pixels. */
+.menubar,
+.win__bar,
+.win__toolbar,
+.win__status,
+.deskfoot,
+.btn,
+.quote,
+.card,
+.win__fallback {
+  font-family: var(--ui);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* ── Menu bar ─────────────────────────────────────────────────────────────── */
+.menubar {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  height: var(--menu-h);
+  display: flex;
+  align-items: stretch;
+  padding: 0 4px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.menubar__item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 clamp(16px, 4vw, 40px);
-  mix-blend-mode: difference;
-}
-.wordmark {
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.28em;
+  padding: 0 10px;
   text-decoration: none;
+  color: var(--ink);
 }
-.site-nav { display: flex; gap: clamp(16px, 3vw, 32px); }
-.site-nav a {
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  text-decoration: none;
-  opacity: 0.75;
-  transition: opacity 0.2s ease;
-}
-.site-nav a:hover { opacity: 1; }
+a.menubar__item:hover { background: var(--ink); color: var(--paper); }
+.menubar__item.is-disabled { color: var(--dimmer); }
+.menubar__gap { flex: 1; }
 
-/* ── Hero ─────────────────────────────────────────────────────────────────── */
-.hero {
-  position: relative;
-  height: 100svh;
-  min-height: 520px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  /* Sits behind the canvas, and stands in for it when WebGL is unavailable. */
-  background:
-    radial-gradient(120% 90% at 50% 40%, #1b2026 0%, #0b0d10 55%, #08090b 100%);
-}
-.hero__canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-.hero__canvas.is-unsupported { display: none; }
-
-/* Darkens the middle of the hero so the quote stays readable whatever the
-   simulation happens to be doing behind it, while leaving the edges clear. */
-.hero__scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse 58% 46% at 50% 47%,
-    rgba(8, 9, 11, 0.86) 0%,
-    rgba(8, 9, 11, 0.62) 45%,
-    rgba(8, 9, 11, 0.15) 78%,
-    rgba(8, 9, 11, 0) 100%
-  );
+/* Stand-in for the Apple menu: a small solid glyph drawn in CSS so no image
+   or trademarked logo is needed. */
+.menubar__mark {
+  align-self: center;
+  width: 11px;
+  height: 11px;
+  margin: 0 10px 0 6px;
+  background: var(--ink);
+  clip-path: polygon(50% 0, 62% 38%, 100% 38%, 70% 62%, 82% 100%, 50% 76%, 18% 100%, 30% 62%, 0 38%, 38% 38%);
 }
 
-.hero__inner {
-  position: relative;
-  z-index: 2;
-  padding: 0 clamp(20px, 6vw, 64px);
-  max-width: 1100px;
-  text-align: center;
-  pointer-events: none;
-}
-.hero__quote { margin: 0; }
-.hero__quote p {
-  margin: 0;
-  font-size: clamp(1.6rem, 5.2vw, 4rem);
-  line-height: 1.12;
-  letter-spacing: -0.03em;
-  font-weight: 500;
-  text-wrap: balance;
-  /* Keeps the words legible whatever the simulation does behind them. */
-  text-shadow: 0 2px 40px rgba(0, 0, 0, 0.85), 0 1px 4px rgba(0, 0, 0, 0.6);
-}
-.hero__quote cite {
-  display: block;
-  margin-top: clamp(16px, 3vw, 28px);
-  font-style: normal;
-  font-size: 0.74rem;
-  letter-spacing: 0.34em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  text-shadow: 0 1px 20px rgba(0, 0, 0, 0.9);
-}
-
-.hero__scroll {
-  position: absolute;
-  z-index: 2;
-  bottom: clamp(20px, 5vh, 48px);
-  left: 50%;
-  transform: translateX(-50%);
+/* ── Windows ──────────────────────────────────────────────────────────────── */
+.desktop {
+  padding: clamp(14px, 2.5vw, 34px);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  color: var(--text-dim);
-  transition: color 0.2s ease;
-}
-.hero__scroll:hover { color: var(--text); }
-.hero__scroll-label {
-  font-size: 0.64rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-}
-.hero__scroll-line {
-  width: 1px;
-  height: 44px;
-  background: linear-gradient(to bottom, currentColor, transparent);
+  gap: clamp(20px, 4vh, 44px);
 }
 
-/* ── Projects ─────────────────────────────────────────────────────────────── */
-.projects {
+.win {
   position: relative;
-  padding: clamp(64px, 12vh, 140px) 0 clamp(48px, 8vh, 96px);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  min-width: 0;
 }
-.projects__head {
+/* Raised by the drag script so the window you grabbed comes to the front. */
+.win.is-front { z-index: 20; }
+
+.win__bar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  gap: 6px;
+  height: var(--bar-h);
+  padding: 0 5px;
+  border-bottom: 1px solid var(--ink);
+  /* The six pinstripes of an active System 7 title bar. */
+  background: repeating-linear-gradient(to bottom, var(--ink) 0 1px, var(--paper) 1px 2px);
+  cursor: default;
+  user-select: none;
+  touch-action: none;
+}
+.win__close,
+.win__zoom {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+.win__zoom { position: relative; }
+.win__zoom::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+.win__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+/* The white plaque that interrupts the stripes behind the name. */
+.win__title > span {
+  max-width: 100%;
+  padding: 0 10px;
+  background: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win__body { padding: clamp(14px, 2vw, 22px); }
+
+.win__toolbar,
+.win__status {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-  padding: 0 clamp(16px, 5vw, 56px);
-  margin-bottom: clamp(32px, 6vh, 64px);
+  gap: 12px;
+  padding: 4px 9px;
+  font-size: 11px;
+  background: var(--paper);
+  min-height: 22px;
 }
-.projects__title {
+.win__toolbar { border-bottom: 1px solid var(--ink); }
+.win__status { border-top: 1px solid var(--ink); }
+.win__status-right,
+.win__toolbar-right { color: var(--dim); }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.stage--hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.5vw, 30px);
+  align-items: start;
+}
+
+.win--sim { display: flex; flex-direction: column; }
+/* The right-hand column is a small stack, so the second window sits under the
+   first rather than beside it. */
+.stage--hero > .hero__col {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.5vw, 30px);
+  min-width: 0;
+}
+
+.info { margin: 0; font-size: 12px; line-height: 1.75; }
+.info dt {
+  font-family: var(--ui);
+  -webkit-font-smoothing: none;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.info dd { margin: 0 0 10px; }
+.info dd:last-child { margin-bottom: 0; }
+.info a { text-decoration: none; border-bottom: 1px solid var(--ink); }
+.info a:hover { background: var(--ink); color: var(--paper); border-bottom-color: transparent; }
+.win__screen {
+  position: relative;
+  /* Tall enough that the flow has room to develop, and bounded so the window
+     still reads as a window rather than a full-bleed background. */
+  height: clamp(320px, calc(100svh - 230px), 620px);
+  background: var(--paper);
+  overflow: hidden;
+}
+.hero__canvas {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Sits underneath the canvas, so it shows through only when startFluid() has
+   given up and hidden it. */
+.hero__canvas.is-unsupported { display: none; }
+.win__fallback {
+  position: absolute;
+  inset: 0;
   margin: 0;
-  font-size: clamp(1.4rem, 3vw, 2rem);
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  padding: 0 20px;
 }
+
+.quote { margin: 0; }
+.quote p {
+  margin: 0;
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
+  font-weight: 700;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.quote cite {
+  display: block;
+  margin-top: 14px;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--dim);
+}
+.quote__note {
+  margin: 20px 0 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ink);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 5px 18px;
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover { background: #ececec; }
+.btn:active { background: var(--ink); color: var(--paper); }
+/* System 7 ringed the default button so Return had an obvious target. */
+.btn--default { margin: 3px; box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+
+/* ── Projects wheel ───────────────────────────────────────────────────────── */
 /* The breakpoint here must match the wheel's `flatBelow` in wheel.ts: below
    it the arc becomes a swipeable row, and "drag" stops being the right verb. */
 .hint--narrow { display: none; }
@@ -180,112 +312,158 @@ a { color: inherit; }
   .hint--narrow { display: inline; }
 }
 
-.projects__hint {
-  margin: 0;
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-/* The wheel: a window onto the top of a large circle. Overflow is hidden so
-   the rest of the rim, and the cards riding it, stay out of sight. */
+/* A window onto the top of a large circle. Overflow is hidden so the rest of
+   the rim, and the cards riding it, stay out of sight. */
 .wheel {
   position: relative;
-  height: clamp(400px, 56vh, 560px);
+  height: clamp(370px, 52vh, 520px);
   overflow: hidden;
   cursor: grab;
   outline: none;
+  /* A light dither behind the cards. They are white, so on a white content
+     area only their 1px outline separated them from the window; this gives
+     them something to sit on, the way icons sit on the desktop. */
+  background-color: #e9e9e9;
+  background-image: repeating-conic-gradient(#e2e2e2 0% 25%, #f2f2f2 0% 50%);
+  background-size: 4px 4px;
   /* The arc handles horizontal movement itself via pointer events, so the
      browser is told to own vertical panning only — otherwise a drag across
-     the wheel scrolls the page instead of turning it. Flat mode overrides
-     this below, because there the browser IS the horizontal scroller. */
+     the wheel scrolls the page instead of turning it. */
   touch-action: pan-y;
 }
-.wheel:focus-visible { box-shadow: inset 0 0 0 1px var(--border-bright); }
 .wheel.is-dragging { cursor: grabbing; }
+.wheel:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 .wheel__ring {
   position: absolute;
   left: 50%;
-  top: 40px;
+  top: 28px;
   width: 0;
-  /* height is set in JS — it equals the circle's radius, putting the ring's
-     bottom edge at the centre of rotation. */
-  transform-origin: 50% 100%;
-  will-change: transform;
 }
-
 .wheel__slot {
   position: absolute;
   left: 0;
   top: 0;
-  width: clamp(200px, 21vw, 268px);
-  will-change: transform, opacity;
-  transition: opacity 0.25s ease;
+  width: clamp(190px, 17vw, 240px);
+  transition: opacity 0.18s linear;
 }
 
-.card {
-  /* The pill hides over a card, so the pointer showing here is what tells you
-     the card is clickable rather than draggable. */
+/* Below the breakpoint the arc is abandoned for a plain scrolling row: on a
+   phone there is no room for the geometry to read, and a swipe is the
+   expected gesture. */
+.wheel.is-flat {
+  height: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   cursor: default;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  padding: 18px 16px 22px;
+}
+.wheel.is-flat .wheel__ring {
+  position: static;
+  width: auto;
+  display: flex;
+  gap: 16px;
+}
+.wheel.is-flat .wheel__slot {
+  position: static;
+  flex: 0 0 auto;
+  width: 200px;
+  scroll-snap-align: center;
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+/* Each project is a little window of its own: title bar, body, status strip. */
+.card {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 18px;
   aspect-ratio: 3 / 4;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: linear-gradient(165deg, #15181d 0%, #0c0e11 100%);
-  overflow: hidden;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow);
   text-decoration: none;
-  color: inherit;
-  user-select: none;
-  transition: border-color 0.25s ease, background 0.25s ease;
+  color: var(--ink);
+  overflow: hidden;
+  /* The pill hides over a card, so the pointer showing here is what tells you
+     the card is clickable rather than draggable. */
+  cursor: default;
 }
 a.card { cursor: pointer; }
-.wheel__slot.is-active .card { border-color: var(--border-bright); }
-.card:hover { border-color: var(--accent); }
-.card--planned:hover { border-color: var(--border-bright); }
 
-.card__status {
-  font-size: 0.6rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+.card__bar {
+  display: flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--ink);
+  background: repeating-linear-gradient(to bottom, var(--ink) 0 1px, var(--paper) 1px 2px);
 }
-.card--in-progress .card__status,
-.card--live .card__status { color: var(--accent); }
+.card__bar-title {
+  margin: 0 auto;
+  padding: 0 6px;
+  max-width: 100%;
+  background: var(--paper);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
+.card__in {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 12px;
+}
 .card__mark {
   display: flex;
   flex-direction: column;
-  font-size: clamp(1.4rem, 2.3vw, 2rem);
-  line-height: 1.02;
-  letter-spacing: -0.04em;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text);
+  font-size: clamp(1.25rem, 1.9vw, 1.6rem);
+  font-weight: 700;
+  line-height: 1.12;
 }
-.card--planned .card__mark { color: var(--text-faint); }
-
 .card__foot {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 0.66rem;
-  letter-spacing: 0.06em;
+  gap: 4px;
+  font-size: 10.5px;
+  line-height: 1.5;
 }
-.card__name { color: var(--text); }
-.card__blurb { color: var(--text-dim); }
-.card__cta { margin-top: 5px; color: var(--accent); }
-.card__cta--muted { color: var(--text-faint); }
+.card__blurb { color: var(--dim); }
+.card__cta { font-weight: 700; }
 
-/* A "drag" pill that follows the cursor across the wheel, replacing the
-   arrow. Mouse only: it is hidden in flat mode and never created for touch
-   or coarse pointers, where there is no cursor to replace. */
+.card__status {
+  padding: 3px 8px;
+  border-top: 1px solid var(--ink);
+  font-size: 9.5px;
+  color: var(--dim);
+}
+/* Selection in System 7 is an inversion, so the live project's status reads
+   as "selected" rather than as a coloured badge. */
+.card--in-progress .card__status,
+.card--live .card__status { background: var(--ink); color: var(--paper); }
+
+/* A planned card is drawn in the greyed-out state the Finder used for things
+   you cannot open: the outline stays crisp — it is still a real object on the
+   desktop — and only the type and the title-bar stripes go pale. */
+.card--planned .card__bar {
+  background: repeating-linear-gradient(to bottom, #a4a4a4 0 1px, var(--paper) 1px 2px);
+}
+.card--planned .card__mark,
+.card--planned .card__bar-title { color: var(--dimmer); }
+.card--planned .card__foot { color: var(--dim); }
+
+/* ── Drag cursor ──────────────────────────────────────────────────────────── */
+/* Mouse users get a small grabber tracking the cursor, in place of the arrow.
+   Mouse only: hidden in flat mode and never created for touch or coarse
+   pointers, where there is no cursor to replace. */
 .wheel__cursor {
   position: absolute;
   left: 0;
@@ -295,93 +473,49 @@ a.card { cursor: pointer; }
   opacity: 0;
   will-change: transform;
 }
-/* Toggled with no transition, deliberately. The pill is what replaces the
-   pointer, so it must appear the instant `cursor: none` takes effect — if a
-   fade were relied on and did not run, the cursor would vanish with nothing
-   in its place. The pill's own scale animates instead, which is safe to lose. */
+/* Toggled with no transition, deliberately: a fade makes the swap to the real
+   pointer over a card look like lag. */
 .wheel.has-cursor .wheel__cursor { opacity: 1; }
-/* Only hide the real cursor once the pill is actually up, so a failure to
-   create it can never leave the pointer invisible. */
 .wheel.has-cursor { cursor: none; }
 .wheel.is-flat .wheel__cursor { display: none; }
 
 .wheel__cursor-pill {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 8px 13px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #06231f;
-  font-size: 0.58rem;
+  gap: 7px;
+  padding: 3px 9px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  font-family: var(--ui);
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.24em;
-  text-indent: 0.24em;
-  text-transform: uppercase;
   white-space: nowrap;
-  transform: scale(0.88);
-  transition: transform 0.18s ease;
-}
-.wheel.has-cursor .wheel__cursor-pill { transform: scale(1); }
-.wheel.is-dragging .wheel__cursor-pill { transform: scale(0.9); }
-.wheel__cursor-pill span { opacity: 0.55; text-indent: 0; }
-
-.wheel__meta {
-  max-width: 640px;
-  margin: clamp(24px, 5vh, 48px) auto 0;
-  padding: 0 clamp(16px, 5vw, 24px);
-  text-align: center;
-  font-size: 0.82rem;
-  line-height: 1.7;
-  color: var(--text-dim);
-  min-height: 4.5em;
+  -webkit-font-smoothing: none;
 }
 
-/* ── Narrow screens: drop the arc for an honest scroll-snap row ───────────── */
-.wheel.is-flat {
-  height: auto;
-  overflow-x: auto;
-  overflow-y: hidden;
-  cursor: default;
-  /* Must override the arc's `pan-y`. With that in force the browser refuses
-     to pan this scroller horizontally, which left the row unswipeable on a
-     phone — the arc's rule was silently applying to the flat layout too. */
-  touch-action: pan-x pan-y;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  padding: 0 max(16px, calc(50vw - 130px));
-  scrollbar-width: none;
-}
-.wheel.is-flat::-webkit-scrollbar { display: none; }
-.wheel.is-flat .wheel__ring {
-  position: static;
-  display: flex;
-  gap: 16px;
-  width: max-content;
-  transform: none;
-}
-.wheel.is-flat .wheel__slot {
-  position: static;
-  flex: 0 0 auto;
-  width: 240px;
-  opacity: 1 !important;
-  scroll-snap-align: center;
-}
-
-/* ── Footer ───────────────────────────────────────────────────────────────── */
-.site-foot {
+/* ── Desktop footer ───────────────────────────────────────────────────────── */
+.deskfoot {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 28px clamp(16px, 5vw, 56px);
-  border-top: 1px solid var(--border);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
+  padding: 6px clamp(16px, 2.5vw, 36px) 22px;
+  font-size: 10.5px;
+  color: #3c3c3c;
+}
+
+/* ── Narrow screens ───────────────────────────────────────────────────────── */
+@media (max-width: 899px) {
+  .stage--hero { grid-template-columns: minmax(0, 1fr); }
+  .win__screen { height: clamp(260px, 46svh, 420px); }
+}
+@media (max-width: 599px) {
+  .menubar__item.is-disabled { display: none; }
+  .win__toolbar-left { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .wheel__slot, .card__face { transition: none; }
+  .wheel__slot { transition: none; }
 }

@@ -8,52 +8,109 @@
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <header class="site-head">
-    <a class="wordmark" href="./">CF</a>
-    <nav class="site-nav">
-      <a href="#projects">Projects</a>
-      <a href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
-    </nav>
-  </header>
+  <!-- The menu bar is chrome, not navigation: only the items that lead
+       somewhere are links. -->
+  <div class="menubar">
+    <span class="menubar__mark" aria-hidden="true"></span>
+    <span class="menubar__item is-disabled">File</span>
+    <span class="menubar__item is-disabled">Edit</span>
+    <span class="menubar__item is-disabled">View</span>
+    <span class="menubar__item is-disabled">Special</span>
+    <span class="menubar__gap"></span>
+    <a class="menubar__item" href="#projects">Projects</a>
+    <a class="menubar__item" href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
+  </div>
 
-  <section class="hero" id="hero">
-    <canvas id="fluid-canvas" class="hero__canvas" aria-hidden="true"></canvas>
-    <div class="hero__scrim" aria-hidden="true"></div>
-    <div class="hero__inner">
-      <blockquote class="hero__quote">
-        <p>There is nothing more deceptive than an obvious fact</p>
-        <cite>Sherlock Holmes</cite>
-      </blockquote>
-    </div>
-    <a class="hero__scroll" href="#projects" aria-label="Scroll to projects">
-      <span class="hero__scroll-label">Projects</span>
-      <span class="hero__scroll-line" aria-hidden="true"></span>
-    </a>
-  </section>
-
-  <main>
-    <section class="projects" id="projects">
-      <div class="projects__head">
-        <h1 class="projects__title">Projects</h1>
-        <p class="projects__hint">
-          <span class="hint--wide">Drag to explore &middot; click a card to open</span>
-          <span class="hint--narrow">Swipe to explore</span>
-        </p>
-      </div>
-
-      <div class="wheel" id="wheel-viewport" tabindex="0" role="group" aria-label="Projects carousel">
-        <div class="wheel__ring" id="wheel-ring">
-          <!-- populated by src/main.ts -->
+  <main class="desktop">
+    <section class="stage stage--hero" id="hero">
+      <div class="win win--sim" data-window>
+        <div class="win__bar" data-drag-handle>
+          <i class="win__close" aria-hidden="true"></i>
+          <span class="win__title"><span>Simulation</span></span>
+          <i class="win__zoom" aria-hidden="true"></i>
+        </div>
+        <div class="win__screen">
+          <p class="win__fallback">Simulation unavailable &mdash; this browser has no WebGL2.</p>
+          <canvas id="fluid-canvas" class="hero__canvas" aria-hidden="true"></canvas>
+        </div>
+        <div class="win__status">
+          <span>Incompressible flow &middot; vortex shedding past a cylinder array</span>
+          <span class="win__status-right">1-bit</span>
         </div>
       </div>
 
-      <div class="wheel__meta" id="wheel-meta" aria-live="polite"></div>
+      <div class="hero__col">
+      <div class="win win--quote" data-window>
+        <div class="win__bar" data-drag-handle>
+          <i class="win__close" aria-hidden="true"></i>
+          <span class="win__title"><span>Read Me</span></span>
+          <i class="win__zoom" aria-hidden="true"></i>
+        </div>
+        <div class="win__body">
+          <blockquote class="quote">
+            <p>There is nothing more deceptive than an obvious fact</p>
+            <cite>Sherlock Holmes</cite>
+          </blockquote>
+          <p class="quote__note">
+            Cesare Faccio &mdash; interactive, browser-based tools built around optics,
+            physics and computer vision. Everything here runs client-side.
+          </p>
+          <a class="btn btn--default" href="#projects">Open Projects</a>
+        </div>
+      </div>
+
+      <div class="win win--info" data-window>
+        <div class="win__bar" data-drag-handle>
+          <i class="win__close" aria-hidden="true"></i>
+          <span class="win__title"><span>Info</span></span>
+          <i class="win__zoom" aria-hidden="true"></i>
+        </div>
+        <div class="win__body">
+          <dl class="info">
+            <dt>Built with</dt>
+            <dd>TypeScript &middot; WebGL2 &middot; Vite</dd>
+            <dt>Source</dt>
+            <dd><a href="https://github.com/CesareFaccio" target="_blank" rel="noopener">github.com/CesareFaccio</a></dd>
+            <dt>Hosting</dt>
+            <dd>GitHub Pages &mdash; no server, no tracking</dd>
+          </dl>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <section class="stage stage--projects" id="projects">
+      <div class="win win--projects" data-window>
+        <div class="win__bar" data-drag-handle>
+          <i class="win__close" aria-hidden="true"></i>
+          <span class="win__title"><span>Projects</span></span>
+          <i class="win__zoom" aria-hidden="true"></i>
+        </div>
+
+        <div class="win__toolbar">
+          <span class="win__toolbar-left">5 items</span>
+          <span class="win__toolbar-right">
+            <span class="hint--wide">Drag to explore &middot; click a card to open</span>
+            <span class="hint--narrow">Swipe to explore</span>
+          </span>
+        </div>
+
+        <div class="wheel" id="wheel-viewport" tabindex="0" role="group" aria-label="Projects carousel">
+          <div class="wheel__ring" id="wheel-ring">
+            <!-- populated by src/main.ts -->
+          </div>
+        </div>
+
+        <div class="win__status">
+          <span id="wheel-meta" aria-live="polite"></span>
+        </div>
+      </div>
     </section>
   </main>
 
-  <footer class="site-foot">
-    <span>&copy; <span id="year"></span> Cesare Faccio</span>
-    <span>Built as a static site &mdash; everything runs client-side.</span>
+  <footer class="deskfoot">
+    <span>(c) <span id="year"></span> Cesare Faccio</span>
+    <span>Static site &mdash; everything runs client-side.</span>
   </footer>
 
   <script type="module" src="/src/main.ts"></script>

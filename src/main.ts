@@ -1,5 +1,6 @@
 import { startFluid } from "./fluid";
 import { createWheel } from "./wheel";
+import { makeWindowsDraggable } from "./windows";
 
 interface Project {
   name: string;
@@ -69,14 +70,20 @@ const projects: Project[] = [
 const heroCanvas = document.getElementById("fluid-canvas") as HTMLCanvasElement | null;
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// Hiding the canvas uncovers the message underneath it, so the two reasons the
+// simulation might not run need to say which one it was — "no WebGL2" is a lie
+// when the visitor simply asked for less motion.
+const heroFallback = document.querySelector<HTMLElement>(".win__fallback");
+
 if (heroCanvas && !prefersReducedMotion) {
   // startFluid() returns null when WebGL2 or float render targets are missing.
-  // The hero's CSS gradient is already behind the canvas, so there is nothing
-  // to do on failure beyond leaving the canvas empty.
   const handle = startFluid(heroCanvas);
   if (!handle) heroCanvas.classList.add("is-unsupported");
 } else if (heroCanvas) {
   heroCanvas.classList.add("is-unsupported");
+  if (heroFallback) {
+    heroFallback.textContent = "Simulation paused \u2014 your system is set to reduce motion.";
+  }
 }
 
 // ── Project wheel ────────────────────────────────────────────────────────────
@@ -100,18 +107,21 @@ function buildCard(itemIndex: number): HTMLElement {
     .map((line) => `<span>${line}</span>`)
     .join("");
 
+  // Each card is a miniature window: title bar, body, status strip.
   card.innerHTML = `
-    <span class="card__status">${project.status}</span>
-    <div class="card__mark">${markLines}</div>
-    <div class="card__foot">
-      <span class="card__name">${project.name}</span>
-      <span class="card__blurb">${project.blurb}</span>
-      ${
-        project.href
-          ? '<span class="card__cta">Open &rarr;</span>'
-          : '<span class="card__cta card__cta--muted">Coming soon</span>'
-      }
+    <div class="card__bar"><span class="card__bar-title">${project.name}</span></div>
+    <div class="card__in">
+      <div class="card__mark">${markLines}</div>
+      <div class="card__foot">
+        <span class="card__blurb">${project.blurb}</span>
+        ${
+          project.href
+            ? '<span class="card__cta">Open &#9654;</span>'
+            : '<span class="card__cta card__cta--muted">Coming soon</span>'
+        }
+      </div>
     </div>
+    <div class="card__status">${project.status}</div>
   `;
   return card;
 }
@@ -127,6 +137,9 @@ createWheel(viewport, ring, {
   onActiveChange: showMeta,
 });
 showMeta(0);
+
+// ── Desktop ──────────────────────────────────────────────────────────────────
+makeWindowsDraggable(document);
 
 // ── Footer ───────────────────────────────────────────────────────────────────
 const yearEl = document.getElementById("year");

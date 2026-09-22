@@ -92,6 +92,13 @@ const OBSTACLE_R = 0.028; // radius, in units of canvas height
 const DISPLAY_GAIN = 1.5;
 
 // Sim steps run before the first paint, so the hero opens mid-turbulence.
+// One device pixel per CSS pixel. The display shader dithers against a 4x4
+// matrix in gl_FragCoord space, so this is what fixes that pattern at a
+// visible 4px grid instead of shrinking it to invisibility on a retina screen —
+// and the chunky output is the point, not a compromise. The dye field is
+// upsampled to the canvas either way, so nothing is lost but fill rate.
+const DPR = 1;
+
 const WARMUP_STEPS = 260;
 const WARMUP_DT = 1 / 60;
 
@@ -323,6 +330,25 @@ uniform float uAspect;
 uniform float uGain;
 out vec4 fragColor;
 ${OBSTACLE_GLSL}
+// The 4x4 ordered (Bayer) matrix a 1-bit Mac used to fake grey. Thresholding
+// the continuous density against it turns a smooth field into the crosshatched
+// patterns of a black-and-white QuickDraw screen — the simulation itself is
+// untouched, this is purely how it is drawn.
+float bayer4 (vec2 pixel) {
+  int x = int(mod(pixel.x, 4.0));
+  int y = int(mod(pixel.y, 4.0));
+  int i = y * 4 + x;
+  float m[16] = float[16](
+     0.0,  8.0,  2.0, 10.0,
+    12.0,  4.0, 14.0,  6.0,
+     3.0, 11.0,  1.0,  9.0,
+    15.0,  7.0, 13.0,  5.0
+  );
+  // +0.5 centres the thresholds, so a flat 50% field dithers to a true
+  // checkerboard rather than tipping wholly one way.
+  return (m[i] + 0.5) / 16.0;
+}
+
 void main () {
   vec3 c = texture(uTexture, vUv).rgb;
   float d = max(max(c.r, c.g), c.b);
@@ -332,15 +358,24 @@ void main () {
   // gave a usable picture. This is monotonic everywhere, so brightness tracks
   // density gradually and mid densities show their structure.
   float v = 1.0 - exp(-uGain * max(d, 0.0));
-  vec3 deep = vec3(0.031, 0.035, 0.043);
-  vec3 mid  = vec3(0.325, 0.396, 0.427);
-  vec3 hot  = vec3(0.706, 0.784, 0.776);
-  vec3 col = mix(deep, mid, min(v * 1.5, 1.0));
-  col = mix(col, hot, clamp((v - 0.62) / 0.38, 0.0, 1.0));
+  // Dye is drawn dark on white paper, so density raises ink coverage. The
+  // density field sits in a narrow band around the middle, and a linear map of
+  // it dithers to near-uniform 50% noise with the flow structure buried in it —
+  // so the band is stretched across the full range first. This is a contrast
+  // expansion, not a threshold: it stays monotonic, so no value of the dye rate
+  // makes the picture flip all at once the way the old smoothstep knee did.
+  float ink = clamp((v - 0.16) / 0.66, 0.0, 1.0);
+  // A slight vignette keeps the far corners of the window clean.
   vec2 q = vUv - 0.5;
-  col *= 1.0 - 0.75 * dot(q, q);
+  ink *= 1.0 - 0.55 * dot(q, q);
+
   float solid = solidAt(vUv, uCount, uX, uR, uAspect);
-  col = mix(col, vec3(0.055, 0.062, 0.072), solid);
+  ink = mix(ink, 1.0, solid);
+
+  // Dither in device pixels, so the pattern stays a crisp 4px grid however the
+  // window is sized — scaling it with the simulation grid would make it crawl.
+  float lit = step(bayer4(gl_FragCoord.xy), ink);
+  vec3 col = vec3(1.0 - lit);
   fragColor = vec4(col, 1.0);
 }`;
 
@@ -503,9 +538,8 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   // this they are computed from the canvas's default 300x150, so the
   // simulation runs at the wrong aspect ratio and the flow comes out stretched.
   {
-    const dpr0 = Math.min(window.devicePixelRatio || 1, 1.75);
-    const w0 = Math.round(canvas.clientWidth * dpr0);
-    const h0 = Math.round(canvas.clientHeight * dpr0);
+    const w0 = Math.round(canvas.clientWidth * DPR);
+    const h0 = Math.round(canvas.clientHeight * DPR);
     if (w0 > 0 && h0 > 0) {
       canvas.width = w0;
       canvas.height = h0;
@@ -732,10 +766,8 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   // is stirred smoothly rather than punched — no moment where a discrete puff
   // appears — and the four of them together keep the whole frame in motion.
   // ── Sizing ───────────────────────────────────────────────────────────────
-  // Cap the device pixel ratio: the dye field is upsampled anyway, so a 3x
-  // backing store costs fill rate for no visible gain.
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    const dpr = DPR;
     const w = Math.round(canvas.clientWidth * dpr);
     const h = Math.round(canvas.clientHeight * dpr);
     if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
