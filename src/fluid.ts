@@ -65,7 +65,12 @@ const CURL = 30; // vorticity confinement strength
 // CURL_CAP bounds the confinement feedback; SPEED_CAP bounds the velocity
 // field itself, at a few times the inflow speed.
 const CURL_CAP = 900;
-const SPEED_CAP = 520;
+// Four times the inflow speed left enough headroom for a stirred region to
+// backtrace ~9 cells per advection step, which does not diverge — semi-
+// Lagrangian advection is unconditionally stable — but scrambles the field
+// into noise, which is what "overwhelmed" looks like. At 2.5x the inflow the
+// cursor still visibly shoves the flow and the structure survives it.
+const SPEED_CAP = 320;
 // Gaussian falloff denominator, in normalised-UV units squared. Small changes
 // here matter a lot: this is what separates thin wisps from billowing smoke.
 const SPLAT_RADIUS = 0.30;
@@ -75,7 +80,14 @@ const SPLAT_RADIUS = 0.30;
 // channel. POINTER_DYE is deliberately small — the cursor is there to stir
 // the smoke that is already flowing, not to paint new smoke into the frame.
 const SPLAT_FORCE = 1400;
-const MAX_POINTER_IMPULSE = 260;
+const MAX_POINTER_IMPULSE = 170;
+// Cursor travel is measured against this many screen pixels, NOT against the
+// width of the canvas. Normalising by the canvas made the same flick hit
+// harder the smaller the canvas got — which is what destabilised the flow once
+// the hero stopped being full-bleed and became a window a little over half as
+// wide. A fixed reference means a given gesture pushes the fluid by the same
+// amount whatever size the window is.
+const POINTER_REFERENCE_PX = 1400;
 const POINTER_DYE = 0.09;
 
 // ── Channel ─────────────────────────────────────────────────────────────────
@@ -364,7 +376,7 @@ void main () {
   // so the band is stretched across the full range first. This is a contrast
   // expansion, not a threshold: it stays monotonic, so no value of the dye rate
   // makes the picture flip all at once the way the old smoothstep knee did.
-  float ink = clamp((v - 0.16) / 0.66, 0.0, 1.0);
+  float ink = clamp((v - 0.14) / 0.78, 0.0, 1.0);
   // A slight vignette keeps the far corners of the window clean.
   vec2 q = vUv - 0.5;
   ink *= 1.0 - 0.55 * dot(q, q);
@@ -703,9 +715,16 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   let lastX = 0;
   let lastY = 0;
 
+  /** Splat position in UV, plus the canvas's on-screen size, which the caller
+   *  needs to turn a UV delta back into the screen pixels the user moved. */
   function toSimCoords(clientX: number, clientY: number) {
     const rect = canvas.getBoundingClientRect();
-    return { x: (clientX - rect.left) / rect.width, y: 1 - (clientY - rect.top) / rect.height };
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: 1 - (clientY - rect.top) / rect.height,
+      w: rect.width,
+      h: rect.height,
+    };
   }
 
   // Pointer movement is accumulated here and applied once per frame, rather
@@ -719,15 +738,18 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   let pointerPending = false;
 
   function onPointerMove(e: PointerEvent) {
-    const { x, y } = toSimCoords(e.clientX, e.clientY);
+    const { x, y, w, h } = toSimCoords(e.clientX, e.clientY);
     if (!pointerActive) {
       pointerActive = true;
       lastX = x;
       lastY = y;
       return;
     }
-    pendingDX += x - lastX;
-    pendingDY += y - lastY;
+    // Converted back to screen pixels and re-normalised against a fixed
+    // reference, so the impulse tracks how far the cursor actually moved
+    // rather than what fraction of the canvas that happened to be.
+    pendingDX += ((x - lastX) * w) / POINTER_REFERENCE_PX;
+    pendingDY += ((y - lastY) * h) / POINTER_REFERENCE_PX;
     lastX = x;
     lastY = y;
     pendingX = x;

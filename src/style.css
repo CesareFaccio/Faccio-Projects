@@ -337,15 +337,23 @@ a.menubar__item:hover { background: var(--ink); color: var(--paper); }
 .wheel__ring {
   position: absolute;
   left: 50%;
-  top: 28px;
+  top: 40px;
   width: 0;
+  /* Height is set in JS — it equals the circle's radius, so the ring's BOTTOM
+     edge sits at the centre of rotation. Rotating about that point is the
+     entire mechanism: it sweeps each slot along the rim. Without this origin
+     the ring pivots about its own middle, half a radius too high, and the
+     cards lurch across the viewport instead of travelling the arc. */
+  transform-origin: 50% 100%;
+  will-change: transform;
 }
 .wheel__slot {
   position: absolute;
   left: 0;
   top: 0;
-  width: clamp(190px, 17vw, 240px);
-  transition: opacity 0.18s linear;
+  width: clamp(200px, 21vw, 268px);
+  will-change: transform, opacity;
+  transition: opacity 0.25s ease;
 }
 
 /* Below the breakpoint the arc is abandoned for a plain scrolling row: on a

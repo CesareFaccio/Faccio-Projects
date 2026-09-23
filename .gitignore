@@ -10,3 +10,6 @@ site-scaffold.tar.gz
 
 # Vite writes these while resolving its config; they are transient.
 vite.config.ts.timestamp-*.mjs
+
+# Screenshots the desktop app drops here when Claude sends a file.
+Claude outputs/
