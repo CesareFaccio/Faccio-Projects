@@ -1,0 +1,338 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Wind Tunnel — the same System 7 skin as the rest of the site.
+
+   Kept as its own stylesheet because this is a separate Vite build; the tokens
+   and chrome below are deliberately identical to the other apps', so a change
+   to one wants the same change to the others.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./fonts/pixelify-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./fonts/pixelify-sans-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --ink: #000;
+  --paper: #fff;
+  --dim: #6b6b6b;
+  --dimmer: #a8a8a8;
+  --ui: "Pixelify Sans", Chicago, "ChicagoFLF", Geneva, Verdana, sans-serif;
+  --body: Geneva, Verdana, Tahoma, "DejaVu Sans", sans-serif;
+  --menu-h: 24px;
+  --bar-h: 20px;
+  --shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.6;
+  background-color: #9a9a9a;
+  background-image: repeating-conic-gradient(#8a8a8a 0% 25%, #b6b6b6 0% 50%);
+  background-size: 4px 4px;
+}
+
+a { color: inherit; }
+
+.menubar,
+.win__bar,
+.win__toolbar,
+.win__status,
+.deskfoot,
+.btn,
+.ctl__row,
+.toolbar__hint,
+.tunnel__fallback {
+  font-family: var(--ui);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* ── Menu bar ─────────────────────────────────────────────────────────────── */
+.menubar {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  height: var(--menu-h);
+  display: flex;
+  align-items: stretch;
+  padding: 0 4px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.menubar__item {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+a.menubar__item:hover { background: var(--ink); color: var(--paper); }
+.menubar__item.is-disabled { color: var(--dimmer); }
+.menubar__gap { flex: 1; }
+.menubar__mark {
+  align-self: center;
+  width: 11px;
+  height: 11px;
+  margin: 0 10px 0 6px;
+  background: var(--ink);
+  clip-path: polygon(50% 0, 62% 38%, 100% 38%, 70% 62%, 82% 100%, 50% 76%, 18% 100%, 30% 62%, 0 38%, 38% 38%);
+}
+
+/* ── Windows ──────────────────────────────────────────────────────────────── */
+.desktop { padding: clamp(14px, 2.5vw, 32px); }
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.85fr);
+  gap: clamp(16px, 2vw, 26px);
+  align-items: start;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2vw, 26px);
+  min-width: 0;
+}
+
+.win {
+  position: relative;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.win.is-front { z-index: 20; }
+
+.win__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--bar-h);
+  padding: 0 5px;
+  border-bottom: 1px solid var(--ink);
+  background: repeating-linear-gradient(to bottom, var(--ink) 0 1px, var(--paper) 1px 2px);
+  cursor: default;
+  user-select: none;
+  touch-action: none;
+}
+.win__close,
+.win__zoom {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+.win__zoom { position: relative; }
+.win__zoom::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 6px;
+  height: 6px;
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+.win__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+.win__title > span {
+  max-width: 100%;
+  padding: 0 10px;
+  background: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win__body { padding: 16px 18px; }
+
+.win__toolbar,
+.win__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--paper);
+  min-height: 24px;
+}
+.win__toolbar { border-bottom: 1px solid var(--ink); flex-wrap: wrap; }
+.win__status { border-top: 1px solid var(--ink); }
+.toolbar__hint { color: var(--dim); }
+.toolbar__buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── Tunnel ───────────────────────────────────────────────────────────────── */
+/* The aspect is fixed. The solver's grids are sized once from it, so letting
+   the shape of the canvas change would leave the flow running on a grid that
+   no longer matches the picture. */
+.tunnel {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--paper);
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+.tunnel__canvas,
+.tunnel__ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.tunnel__ink { pointer-events: none; }
+.tunnel__fallback {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  padding: 0 20px;
+}
+.tunnel__fallback[hidden] { display: none; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+  padding: 3px 11px;
+  border: 1px solid var(--ink);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 10.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.btn:hover { background: #ececec; }
+.btn:active,
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* ── Sliders ──────────────────────────────────────────────────────────────── */
+.ctl { margin-bottom: 16px; }
+.ctl:last-child { margin-bottom: 0; }
+.ctl__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+.ctl__row output { color: var(--dim); }
+.ctl__note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--dim);
+}
+.ctl__note b { color: var(--ink); font-weight: 600; }
+.ctl--flagged {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ink);
+}
+
+/* A System 7 slider: a hairline groove with a squared-off knob riding it. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 16px;
+  margin-top: -6px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 14px;
+  border-radius: 0;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+input[type="range"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ── Trace ────────────────────────────────────────────────────────────────── */
+.trace { padding: 8px; background: var(--paper); }
+.trace__canvas {
+  display: block;
+  width: 100%;
+  height: 168px;
+  border: 1px solid var(--ink);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+.deskfoot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 6px clamp(14px, 2.5vw, 32px) 24px;
+  font-size: 10.5px;
+  color: #3c3c3c;
+}
+.deskfoot a { text-decoration: none; }
+.deskfoot a:hover { background: var(--ink); color: var(--paper); }
+
+@media (max-width: 899px) {
+  .stage { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 599px) {
+  .menubar__item.is-disabled { display: none; }
+  .toolbar__hint { display: none; }
+}

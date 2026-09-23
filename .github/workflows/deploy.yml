@@ -26,6 +26,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             crux-vision-app/package-lock.json
+            wind-tunnel-app/package-lock.json
 
       - name: Build root site
         run: |
@@ -38,10 +39,18 @@ jobs:
           npm ci
           npm run build
 
-      - name: Merge crux-vision-app into root build
+      - name: Build wind-tunnel-app
+        run: |
+          cd wind-tunnel-app
+          npm ci
+          npm run build
+
+      - name: Merge the project apps into the root build
         run: |
           mkdir -p dist/crux-vision
           cp -r crux-vision-app/dist/. dist/crux-vision/
+          mkdir -p dist/wind-tunnel
+          cp -r wind-tunnel-app/dist/. dist/wind-tunnel/
 
       - uses: actions/upload-pages-artifact@v3
         with:

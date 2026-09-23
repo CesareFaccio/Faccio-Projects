@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wind Tunnel — Cesare Faccio</title>
+  <meta name="description" content="Wind Tunnel — draw a shape and watch a browser-side fluid simulation turn it into the wind." />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div class="menubar">
+    <a class="menubar__mark" href="../" aria-label="Back to projects"></a>
+    <span class="menubar__item is-disabled">File</span>
+    <span class="menubar__item is-disabled">Edit</span>
+    <span class="menubar__item is-disabled">Special</span>
+    <span class="menubar__gap"></span>
+    <a class="menubar__item" href="../">Projects</a>
+    <a class="menubar__item" href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
+  </div>
+
+  <main class="desktop">
+    <div class="stage">
+      <div class="win win--tunnel" data-window>
+        <div class="win__bar" data-drag-handle>
+          <i class="win__close" aria-hidden="true"></i>
+          <span class="win__title"><span>Wind Tunnel</span></span>
+          <i class="win__zoom" aria-hidden="true"></i>
+        </div>
+
+        <div class="win__toolbar">
+          <span class="toolbar__hint">Drag inside the tunnel to draw a shape</span>
+          <span class="toolbar__buttons">
+            <button class="btn" id="preset-teardrop" type="button">Teardrop</button>
+            <button class="btn" id="preset-plate" type="button">Plate</button>
+            <button class="btn" id="reset-flow" type="button">Reset air</button>
+            <button class="btn" id="pause" type="button" aria-pressed="false">Pause</button>
+          </span>
+        </div>
+
+        <div class="tunnel">
+          <p class="tunnel__fallback">Simulation unavailable &mdash; this browser has no WebGL2.</p>
+          <canvas id="tunnel-canvas" class="tunnel__canvas"></canvas>
+          <canvas id="ink-canvas" class="tunnel__ink" aria-hidden="true"></canvas>
+        </div>
+
+        <div class="win__status">
+          <span id="tunnel-status">Air runs bottom to top. The shape is pinned at the cross and free to turn.</span>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="win win--controls" data-window>
+          <div class="win__bar" data-drag-handle>
+            <i class="win__close" aria-hidden="true"></i>
+            <span class="win__title"><span>Controls</span></span>
+            <i class="win__zoom" aria-hidden="true"></i>
+          </div>
+          <div class="win__body">
+            <div class="ctl">
+              <label class="ctl__row" for="s-wind"><span>Wind speed</span><output id="o-wind"></output></label>
+              <input id="s-wind" type="range" min="0" max="1" step="0.01" value="0.55" />
+            </div>
+            <div class="ctl">
+              <label class="ctl__row" for="s-turb"><span>Turbulence</span><output id="o-turb"></output></label>
+              <input id="s-turb" type="range" min="0" max="1" step="0.01" value="0.45" />
+            </div>
+            <div class="ctl">
+              <label class="ctl__row" for="s-inertia"><span>Rotational inertia</span><output id="o-inertia"></output></label>
+              <input id="s-inertia" type="range" min="0" max="1" step="0.01" value="0.45" />
+            </div>
+            <div class="ctl">
+              <label class="ctl__row" for="s-damp"><span>Angular damping</span><output id="o-damp"></output></label>
+              <input id="s-damp" type="range" min="0" max="1" step="0.01" value="0.6" />
+            </div>
+            <div class="ctl ctl--flagged">
+              <label class="ctl__row" for="s-balance"><span>Balance point</span><output id="o-balance"></output></label>
+              <input id="s-balance" type="range" min="-1" max="1" step="0.01" value="0.5" />
+              <p class="ctl__note">
+                Where the shape is pinned along its own long axis. Held near its nose it
+                weathervanes, turning to lie <b>along</b> the flow, the way a dart or a
+                weathervane does. Pinned at its <b>centre</b> it does the opposite and
+                settles <b>across</b> the flow &mdash; that is the real physics, and the
+                reason a dropped card lands flat rather than knifing down.
+              </p>
+            </div>
+          </div>
+          <div class="win__status">
+            <span id="angle-readout">&mdash;</span>
+          </div>
+        </div>
+
+        <div class="win win--trace" data-window>
+          <div class="win__bar" data-drag-handle>
+            <i class="win__close" aria-hidden="true"></i>
+            <span class="win__title"><span>Torque vs Angle</span></span>
+            <i class="win__zoom" aria-hidden="true"></i>
+          </div>
+          <div class="trace">
+            <canvas id="trace-canvas" class="trace__canvas"></canvas>
+          </div>
+          <div class="win__status">
+            <span id="trace-status">no samples yet</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="deskfoot">
+    <span><a href="../">&larr; All projects</a></span>
+    <span>Runs entirely client-side.</span>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

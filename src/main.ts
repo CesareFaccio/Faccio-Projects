@@ -33,12 +33,13 @@ const projects: Project[] = [
     status: "in progress",
   },
   {
-    name: "Project Two",
-    mark: "Two",
-    blurb: "Placeholder",
-    detail: "Placeholder card — replace this entry in src/main.ts with your next project.",
-    href: null,
-    status: "planned",
+    name: "Wind Tunnel",
+    mark: "Wind\nTunnel",
+    blurb: "Draw a shape, watch it turn",
+    detail:
+      "Draw any closed shape and drop it into a vertical wind tunnel. The flow is solved in your browser, the torque on the shape is measured from the air it deflects, and it turns until it finds an orientation it can hold.",
+    href: "wind-tunnel/",
+    status: "in progress",
   },
   {
     name: "Project Three",
