@@ -54,7 +54,19 @@ export interface TunnelParams {
   damping: number;
   /** 0..1 — multiplier on the shape's own moment of area. */
   inertia: number;
-  /** 0..1 — vorticity confinement, i.e. how chaotic the wake is allowed to be. */
+  /**
+   * 0..1 — inverse viscosity, and so the Reynolds number.
+   *
+   * At 0 the air is thick: the boundary layer stays attached, the wake closes
+   * quietly behind the body and it settles quickly. Toward 1 the air thins, the
+   * layer separates, and the wake becomes a broad unsteady one shedding
+   * vortices off alternate sides, which buffets the body and makes it hunt
+   * around its equilibrium rather than sitting on it.
+   *
+   * There is a ceiling the slider cannot pass: a 180-cell grid has a numerical
+   * diffusion of its own, so the top of the range is "as sharp as this grid
+   * gets", not "inviscid".
+   */
   turbulence: number;
   /**
    * -1..1 — where the body is pinned, along its own long axis, as a fraction of
@@ -87,6 +99,9 @@ export interface TunnelReadout {
   /** How many grid cells the fastest part of the flow crosses per step. Above
    *  about 2 the advection stops resolving the flow and starts smearing it. */
   cflCells: number;
+  /** Reynolds number on the body's width. Indicative: it counts the grid's own
+   *  numerical diffusion, which is an estimate. */
+  reynolds: number;
 }
 
 export interface TunnelHandle {
@@ -129,26 +144,13 @@ const PRESSURE_DISSIPATION = 0.3;
 const PRESSURE_ITERATIONS = 40;
 
 const CURL_CAP = 900;
-// This ceiling is what actually keeps the turbulence slider usable, and it is
-// worth being blunt about that. Vorticity confinement adds energy in proportion
-// to the vorticity already present, and the only counterweight is a dissipation
-// rate two orders of magnitude smaller, so its equilibrium is not "somewhat
-// fast" — it is unbounded. Measured with the peak-speed probe: at the old
-// ceiling of 340 (5.7 cells of travel per advection step) the slider drove the
-// fastest part of the flow to 4.5 and transiently 6.5 cells per step, the
-// advection stopped resolving anything, and the measured torque — which reads
-// the pressure field — jumped tenfold with it.
-//
-// Lowering CURL_MAX helps but does not fix it. Re-tested at CURL_MAX 22 with
-// this ceiling lifted to 420, the peak went straight back to 6-7.5 cells and
-// the torque to 1.2. The clamp is load-bearing, not a belt-and-braces extra.
-//
-// 190 bounds each component, so a diagonal velocity can still reach 190*sqrt(2),
-// about 4.5 cells — which is what the probe reports as the peak. That is the
-// single fastest cell in the field, not the typical one: the mean sits at 2.2
-// to 3.3, and the natural flow is left alone (at full wind with no turbulence
-// the peak is 2.3). The clamp binds only when confinement tries to push past
-// what the grid can carry.
+// A safety net, and — since the turbulence slider became a viscosity rather
+// than a vorticity-confinement strength — no longer a working part. Measured
+// with this lifted to 420 so the physics had to hold unaided, the peak stays at
+// 1.9 to 2.0 cells of travel per advection step across the whole slider. It
+// used to reach 6.5, and the clamp was the only thing standing in the way.
+// 190 bounds each component, so a diagonal velocity could still reach about 4.5
+// cells if anything ever pushed that hard. Nothing currently does.
 const SPEED_CAP = 190;
 
 
@@ -171,12 +173,40 @@ const DT = 1 / 60;
 // worse than a shorter slider.
 const WIND_MIN = 45;
 const WIND_MAX = 128;
-// Vorticity confinement is a positive feedback: it adds energy in proportion to
-// the vorticity already present. 42 let the top of the turbulence slider run
-// away — the solid body here sheds far stronger shear than the thin cylinders
-// the hero's value of 30 was chosen against. This keeps the whole slider inside
-// what the grid can resolve.
-const CURL_MAX = 22;
+// Vorticity confinement is now a small FIXED amount, used for the one thing it
+// is actually for: partly undoing the numerical diffusion of the advection
+// scheme, so an eddy survives long enough to be seen. It is no longer wired to
+// any slider, because it was never a physical quantity and driving it was what
+// made the flow run away.
+const CURL_STRENGTH = 6;
+
+// Kinematic viscosity, in cells squared per second, at the laminar end of the
+// slider. At the other end the slider asks for zero and the flow is left to
+// whatever the grid itself imposes.
+const VISCOSITY_MAX = 90;
+/** Jacobi sweeps for the diffusion solve. Diffusion is a smooth operator and
+ *  does not need the convergence the pressure solve does. */
+const VISCOSITY_ITERATIONS = 16;
+/**
+ * The viscosity the slider can never go below, and the reason is a balance
+ * rather than a preference. Vorticity confinement injects energy; viscous
+ * diffusion removes it. Measured with the safety clamp lifted so the physics
+ * had to hold on its own: at nu = 38 a confinement of 11 was fully held (peak
+ * 1.9 cells per step), and at nu = 8 it was not (4.8 and climbing). Holding the
+ * same ratio at the bottom of the range is what fixes these two numbers
+ * together — drop either and the top of the slider runs away again.
+ */
+const VISCOSITY_FLOOR = 20;
+/** Below this the explicit solve costs more than it changes. */
+const VISCOSITY_MIN = 0.4;
+/**
+ * The advection scheme's own diffusion, in the same units, as an order-of-
+ * magnitude estimate for this grid. It exists whether or not any viscosity is
+ * asked for, which is why the Reynolds number shown to the viewer is computed
+ * against the SUM of the two and is indicative rather than calibrated: the
+ * simulation cannot be made sharper than its own grid, only blunter.
+ */
+const NUMERICAL_VISCOSITY = 18;
 
 // Both of these come from a measured torque curve rather than a guess, which
 // is the only reason the body moves at all: swept through angle with its
@@ -313,6 +343,46 @@ void main () {
     float rakes = pow(0.5 + 0.5 * cos(vUv.x * uRakes * 6.2831853), 6.0);
     fragColor = vec4(base.x + band * rakes * uAmount, 0.0, 0.0, 1.0);
   }
+}`;
+
+/**
+ * One Jacobi sweep of implicit viscous diffusion, solving
+ *
+ *     (I - nu * dt * laplacian) u_new = u_old
+ *
+ * This is the term the "turbulence" slider actually moves, and it is the only
+ * honest place to put it. What was there before — vorticity confinement — is
+ * not a physical effect at all: it is a numerical corrector that pushes
+ * vorticity back toward local maxima to undo the smearing of a coarse advection
+ * scheme. Turning it up does not make a flow more turbulent, it injects energy
+ * at the grid scale, which is exactly why it ran away.
+ *
+ * Viscosity is the real knob. It sets the Reynolds number, and the Reynolds
+ * number is what decides whether the boundary layer stays attached and the wake
+ * closes quietly behind the body, or separates into a broad unsteady wake that
+ * sheds vortices alternately off each side.
+ *
+ * The solve is implicit because explicit diffusion needs nu*dt/dx^2 <= 1/4,
+ * which at this timestep caps nu at about 15 — well below the laminar end of
+ * the range. Velocities here are already in cells per second and the grid
+ * spacing is one cell, so nu is in cells squared per second and no unit
+ * conversion is needed.
+ */
+const VISCOSITY_SHADER = `#version 300 es
+precision highp float; precision highp sampler2D;
+in vec2 vUv; in vec2 vL; in vec2 vR; in vec2 vT; in vec2 vB;
+uniform sampler2D uVelocity;
+uniform sampler2D uSource;
+uniform float alpha;
+uniform float rBeta;
+out vec4 fragColor;
+void main () {
+  vec2 L = texture(uVelocity, vL).xy;
+  vec2 R = texture(uVelocity, vR).xy;
+  vec2 T = texture(uVelocity, vT).xy;
+  vec2 B = texture(uVelocity, vB).xy;
+  vec2 b = texture(uSource, vUv).xy;
+  fragColor = vec4((L + R + T + B + alpha * b) * rBeta, 0.0, 1.0);
 }`;
 
 const DIVERGENCE_SHADER = `#version 300 es
@@ -766,6 +836,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
   const dye = createDoubleFBO(dyeGrid.width, dyeGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, linear);
   const divergence = createFBO(simGrid.width, simGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
   const curlField = createFBO(simGrid.width, simGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
+  const viscositySource = createFBO(simGrid.width, simGrid.height, gl.RG16F, gl.RG, gl.HALF_FLOAT, gl.NEAREST);
   // Full float, and linear because the force pass samples it on its own grid
   // rather than this one. Half precision costs about three decimal digits, and
   // the quantity being integrated is a small difference across the body's
@@ -804,6 +875,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
   const divergenceProgram = new Program(gl, vertexShader, DIVERGENCE_SHADER);
   const curlProgram = new Program(gl, vertexShader, CURL_SHADER);
   const vorticityProgram = new Program(gl, vertexShader, VORTICITY_SHADER);
+  const viscosityProgram = new Program(gl, vertexShader, VISCOSITY_SHADER);
   const pressureProgram = new Program(gl, vertexShader, PRESSURE_SHADER);
   const gradientProgram = new Program(gl, vertexShader, GRADIENT_SUBTRACT_SHADER);
   const bodyApplyProgram = new Program(gl, vertexShader, BODY_APPLY_SHADER);
@@ -833,7 +905,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     wind: 0.55,
     damping: 0.6,
     inertia: 0.45,
-    turbulence: 0.45,
+    turbulence: 0.6,
     balance: 0.5,
   };
   const readBuffer = new Float32Array(4);
@@ -877,6 +949,45 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform1f(inletProgram.uniforms.uTime!, time);
     blit(target.write);
     target.swap();
+  }
+
+  /** Kinematic viscosity the slider is currently asking for. Squared so the
+   *  interesting, nearly-inviscid end of the range gets most of the travel. */
+  function viscosity() {
+    const t = 1 - params.turbulence;
+    return VISCOSITY_FLOOR + (VISCOSITY_MAX - VISCOSITY_FLOOR) * t * t;
+  }
+
+  /** Reynolds number, on the body's own width, against the total viscosity —
+   *  what the slider adds plus what the grid imposes regardless. */
+  function reynolds() {
+    if (!shape) return 0;
+    const diameter = 2 * shape.radius * simGrid.height;
+    return (windSpeed() * diameter) / (viscosity() + NUMERICAL_VISCOSITY);
+  }
+
+  function diffuse(dt: number) {
+    const nu = viscosity();
+    if (nu < VISCOSITY_MIN) return;
+
+    // Keep the pre-diffusion field: every Jacobi sweep needs it as the
+    // right-hand side, not just the previous iterate.
+    clearProgram.bind();
+    gl!.uniform1i(clearProgram.uniforms.uTexture!, velocity.read.attach(0));
+    gl!.uniform1f(clearProgram.uniforms.value!, 1);
+    blit(viscositySource);
+
+    const alpha = 1 / (nu * dt);
+    viscosityProgram.bind();
+    gl!.uniform2f(viscosityProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
+    gl!.uniform1f(viscosityProgram.uniforms.alpha!, alpha);
+    gl!.uniform1f(viscosityProgram.uniforms.rBeta!, 1 / (4 + alpha));
+    gl!.uniform1i(viscosityProgram.uniforms.uSource!, viscositySource.attach(1));
+    for (let i = 0; i < VISCOSITY_ITERATIONS; i++) {
+      gl!.uniform1i(viscosityProgram.uniforms.uVelocity!, velocity.read.attach(0));
+      blit(velocity.write);
+      velocity.swap();
+    }
   }
 
   function applyBody() {
@@ -941,7 +1052,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform2f(vorticityProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1i(vorticityProgram.uniforms.uVelocity!, velocity.read.attach(0));
     gl!.uniform1i(vorticityProgram.uniforms.uCurl!, curlField.attach(1));
-    gl!.uniform1f(vorticityProgram.uniforms.curl!, CURL_MAX * params.turbulence);
+    gl!.uniform1f(vorticityProgram.uniforms.curl!, CURL_STRENGTH);
     gl!.uniform1f(vorticityProgram.uniforms.curlCap!, CURL_CAP);
     gl!.uniform1f(vorticityProgram.uniforms.speedCap!, SPEED_CAP);
     gl!.uniform1f(vorticityProgram.uniforms.dt!, dt);
@@ -953,18 +1064,14 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
     gl!.uniform1i(advectionProgram.uniforms.uSource!, velocity.read.attach(0));
     gl!.uniform1f(advectionProgram.uniforms.dt!, dt);
-    // Slightly less damping when turbulence is high, so eddies survive long
-    // enough to be seen shedding rather than dissolving a body-length
-    // downstream. The span is deliberately narrow: the same slider is already
-    // raising the confinement, and letting it cut the damping in half at the
-    // same time made one knob amplify itself twice over.
-    gl!.uniform1f(
-      advectionProgram.uniforms.dissipation!,
-      VELOCITY_DISSIPATION * (1.25 - 0.45 * params.turbulence),
-    );
+    // A small fixed bleed. This is a linear drag, not viscosity — it damps every
+    // scale equally — so it is kept low and left alone; the diffusion step below
+    // is what the slider moves.
+    gl!.uniform1f(advectionProgram.uniforms.dissipation!, VELOCITY_DISSIPATION);
     blit(velocity.write);
     velocity.swap();
 
+    diffuse(dt);
     runInlet(velocity, 0);
     applyBody();
 
@@ -1140,6 +1247,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
         omega,
         torque: torqueSmoothed,
         cflCells: peakSpeed * DT,
+        reynolds: reynolds(),
         settled: settledFor > SETTLED_FRAMES,
       };
     },

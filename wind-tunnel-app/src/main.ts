@@ -16,6 +16,7 @@ const tunnelStatus = document.getElementById("tunnel-status") as HTMLElement;
 const traceStatus = document.getElementById("trace-status") as HTMLElement;
 const angleReadout = document.getElementById("angle-readout") as HTMLElement;
 const pauseBtn = document.getElementById("pause") as HTMLButtonElement;
+const turbOut = document.getElementById("o-turb") as HTMLOutputElement;
 
 makeWindowsDraggable(document);
 
@@ -207,6 +208,12 @@ function start(t: TunnelHandle) {
       angleReadout.textContent = r.settled
         ? `settled at ${deg}°`
         : `${deg}°  ·  turning ${r.omega >= 0 ? "ccw" : "cw"}`;
+      // Two significant figures: the number is indicative, and printing it to
+      // four would be claiming a precision the grid does not have.
+      const re = r.reynolds;
+      turbOut.textContent = re > 0
+        ? `Re \u2248 ${re < 100 ? Math.round(re / 5) * 5 : Math.round(re / 10) * 10}`
+        : "";
     }
   }
 

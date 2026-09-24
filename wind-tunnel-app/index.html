@@ -62,7 +62,14 @@
             </div>
             <div class="ctl">
               <label class="ctl__row" for="s-turb"><span>Turbulence</span><output id="o-turb"></output></label>
-              <input id="s-turb" type="range" min="0" max="1" step="0.01" value="0.45" />
+              <input id="s-turb" type="range" min="0" max="1" step="0.01" value="0.6" />
+              <p class="ctl__note">
+                This is the air's <b>viscosity</b>, and so the Reynolds number. Thick air
+                on the left: the flow stays attached and the wake closes quietly behind
+                the shape. Thin air on the right: the flow separates, and the wake
+                broadens and starts shedding vortices off alternate sides, which buffets
+                the shape instead of letting it sit still.
+              </p>
             </div>
             <div class="ctl">
               <label class="ctl__row" for="s-inertia"><span>Rotational inertia</span><output id="o-inertia"></output></label>
