@@ -84,6 +84,9 @@ export interface TunnelReadout {
   torque: number;
   /** True once the body has been turning slowly for a while. */
   settled: boolean;
+  /** How many grid cells the fastest part of the flow crosses per step. Above
+   *  about 2 the advection stops resolving the flow and starts smearing it. */
+  cflCells: number;
 }
 
 export interface TunnelHandle {
@@ -109,7 +112,12 @@ const DYE_RESOLUTION = 420;
  *  four on a side and the reduction divides exactly at every level. */
 const FORCE_RESOLUTION = 256;
 
-const DENSITY_DISSIPATION = 0.5;
+// The smoke has to survive the whole height of the tunnel, because the
+// interesting part of the picture is the wake ABOVE the body, not the rakes
+// below it. At 0.5 a streakline faded under the display's black point before
+// it got there and the wake was invisible; at 0.12 there was no sink strong
+// enough to balance the injection and the whole frame filled in solid.
+const DENSITY_DISSIPATION = 0.28;
 const VELOCITY_DISSIPATION = 0.08;
 // The pressure field is integrated to get the force on the body, not just used
 // to project the velocity, so it has to be a good deal more trustworthy here
@@ -121,11 +129,31 @@ const PRESSURE_DISSIPATION = 0.3;
 const PRESSURE_ITERATIONS = 40;
 
 const CURL_CAP = 900;
-const SPEED_CAP = 340;
+// This ceiling is what actually keeps the turbulence slider usable, and it is
+// worth being blunt about that. Vorticity confinement adds energy in proportion
+// to the vorticity already present, and the only counterweight is a dissipation
+// rate two orders of magnitude smaller, so its equilibrium is not "somewhat
+// fast" — it is unbounded. Measured with the peak-speed probe: at the old
+// ceiling of 340 (5.7 cells of travel per advection step) the slider drove the
+// fastest part of the flow to 4.5 and transiently 6.5 cells per step, the
+// advection stopped resolving anything, and the measured torque — which reads
+// the pressure field — jumped tenfold with it.
+//
+// Lowering CURL_MAX helps but does not fix it. Re-tested at CURL_MAX 22 with
+// this ceiling lifted to 420, the peak went straight back to 6-7.5 cells and
+// the torque to 1.2. The clamp is load-bearing, not a belt-and-braces extra.
+//
+// 190 bounds each component, so a diagonal velocity can still reach 190*sqrt(2),
+// about 4.5 cells — which is what the probe reports as the peak. That is the
+// single fastest cell in the field, not the typical one: the mean sits at 2.2
+// to 3.3, and the natural flow is left alone (at full wind with no turbulence
+// the peak is 2.3). The clamp binds only when confinement tries to push past
+// what the grid can carry.
+const SPEED_CAP = 190;
 
 
 const INLET_WIDTH = 0.05;
-const INLET_DYE_RATE = 0.5;
+const INLET_DYE_RATE = 0.95;
 const RAKE_COUNT = 22;
 
 const DISPLAY_GAIN = 1.5;
@@ -143,7 +171,12 @@ const DT = 1 / 60;
 // worse than a shorter slider.
 const WIND_MIN = 45;
 const WIND_MAX = 128;
-const CURL_MAX = 42;
+// Vorticity confinement is a positive feedback: it adds energy in proportion to
+// the vorticity already present. 42 let the top of the turbulence slider run
+// away — the solid body here sheds far stronger shear than the thin cylinders
+// the hero's value of 30 was chosen against. This keeps the whole slider inside
+// what the grid can resolve.
+const CURL_MAX = 22;
 
 // Both of these come from a measured torque curve rather than a guess, which
 // is the only reason the body moves at all: swept through angle with its
@@ -366,6 +399,7 @@ precision highp float; precision highp sampler2D;
 in vec2 vUv; in vec2 vL; in vec2 vR; in vec2 vT; in vec2 vB;
 uniform sampler2D uPressure;
 uniform sampler2D uVelocity;
+uniform float speedCap;
 out vec4 fragColor;
 void main () {
   float L = texture(uPressure, vL).x;
@@ -373,7 +407,11 @@ void main () {
   float T = texture(uPressure, vT).x;
   float B = texture(uPressure, vB).x;
   vec2 velocity = texture(uVelocity, vUv).xy - vec2(R - L, T - B);
-  fragColor = vec4(velocity, 0.0, 1.0);
+  // The same ceiling as the vorticity pass, applied again here. Without it the
+  // projection could hand the advection a field faster than the clamp allows —
+  // measured at 4.3 cells per step against a ceiling meant to be 3.2 — and it
+  // is the field coming OUT of the projection that gets advected.
+  fragColor = vec4(clamp(velocity, -speedCap, speedCap), 0.0, 1.0);
 }`;
 
 /** Drives the velocity inside the body toward that of a solid spinning at
@@ -430,6 +468,7 @@ const BODY_FORCE_SHADER = `#version 300 es
 precision highp float; precision highp sampler2D;
 in vec2 vUv;
 uniform sampler2D uPressure;
+uniform sampler2D uVelocity;
 uniform vec2 uStep;
 uniform float uGrid;
 uniform float uDt;
@@ -450,7 +489,14 @@ void main () {
   float p = texture(uPressure, vUv).x / uDt;
   vec2 fPressure = p * gradCov;
 
-  fragColor = vec4(r.x * fPressure.y - r.y * fPressure.x, 0.0, 0.0, 1.0);
+  // Green carries the local speed, which the reduction maxes rather than sums.
+  // The advection step moves a parcel dt*u cells, so this number divided by 60
+  // is how many cells the fastest part of the flow jumps per step — the single
+  // most useful thing to know about whether the solver is still resolving
+  // anything or just smearing.
+  float speed = length(texture(uVelocity, vUv).xy);
+
+  fragColor = vec4(r.x * fPressure.y - r.y * fPressure.x, speed, 0.0, 1.0);
 }`;
 
 /** Clears the smoke out of the body's interior. Without it the dye advects
@@ -479,13 +525,17 @@ void main () {
   // vUv is the centre of a destination texel, which covers exactly 4x4 source
   // texels; step back to the first of them.
   vec2 base = vUv - 1.5 * uSourceTexel;
-  vec4 sum = vec4(0.0);
+  vec4 acc = vec4(0.0);
   for (int y = 0; y < 4; y++) {
     for (int x = 0; x < 4; x++) {
-      sum += texture(uTexture, base + vec2(float(x), float(y)) * uSourceTexel);
+      vec4 s = texture(uTexture, base + vec2(float(x), float(y)) * uSourceTexel);
+      // Red accumulates (it is an integral); green takes the maximum (it is a
+      // peak). Both survive the whole chain down to one texel.
+      acc.r += s.r;
+      acc.g = max(acc.g, s.g);
     }
   }
-  fragColor = sum;
+  fragColor = acc;
 }`;
 
 const DISPLAY_SHADER = `#version 300 es
@@ -536,6 +586,8 @@ void main () {
 
 interface Measured {
   torque: number;
+  /** Largest speed anywhere in the field, in solver units. */
+  peakSpeed: number;
 }
 
 interface FBO {
@@ -765,6 +817,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
   let angle = 0;
   let omega = 0;
   let torqueSmoothed = 0;
+  let peakSpeed = 0;
   let settledFor = 0;
   let time = 0;
   let paused = false;
@@ -844,10 +897,11 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
    * of the tunnel, and solver velocity is gridHeight times tunnel speed.
    */
   function measureForce(): Measured {
-    if (!shape) return { torque: 0 };
+    if (!shape) return { torque: 0, peakSpeed: 0 };
 
     bodyForceProgram.bind();
     gl!.uniform1i(bodyForceProgram.uniforms.uPressure!, pressure.read.attach(1));
+    gl!.uniform1i(bodyForceProgram.uniforms.uVelocity!, velocity.read.attach(2));
     gl!.uniform2f(bodyForceProgram.uniforms.uStep!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1f(bodyForceProgram.uniforms.uGrid!, simGrid.height);
     gl!.uniform1f(bodyForceProgram.uniforms.uDt!, DT);
@@ -870,7 +924,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     // Each force texel stands for this much tunnel area.
     const cellArea = (aspect / FORCE_RESOLUTION) * (1 / FORCE_RESOLUTION);
     // Solver velocity is gridHeight x tunnel speed, and force is linear in it.
-    return { torque: readBuffer[0] * (cellArea / simGrid.height) };
+    return { torque: readBuffer[0] * (cellArea / simGrid.height), peakSpeed: readBuffer[1] };
   }
 
   function step(dt: number) {
@@ -899,9 +953,15 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
     gl!.uniform1i(advectionProgram.uniforms.uSource!, velocity.read.attach(0));
     gl!.uniform1f(advectionProgram.uniforms.dt!, dt);
-    // Less damping when turbulence is high, so eddies survive long enough to
-    // be seen shedding rather than dissolving a body-length downstream.
-    gl!.uniform1f(advectionProgram.uniforms.dissipation!, VELOCITY_DISSIPATION * (1.6 - params.turbulence));
+    // Slightly less damping when turbulence is high, so eddies survive long
+    // enough to be seen shedding rather than dissolving a body-length
+    // downstream. The span is deliberately narrow: the same slider is already
+    // raising the confinement, and letting it cut the damping in half at the
+    // same time made one knob amplify itself twice over.
+    gl!.uniform1f(
+      advectionProgram.uniforms.dissipation!,
+      VELOCITY_DISSIPATION * (1.25 - 0.45 * params.turbulence),
+    );
     blit(velocity.write);
     velocity.swap();
 
@@ -933,6 +993,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform2f(gradientProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1i(gradientProgram.uniforms.uPressure!, pressure.read.attach(0));
     gl!.uniform1i(gradientProgram.uniforms.uVelocity!, velocity.read.attach(1));
+    gl!.uniform1f(gradientProgram.uniforms.speedCap!, SPEED_CAP);
     blit(velocity.write);
     velocity.swap();
 
@@ -966,6 +1027,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     // ── Rotation ──────────────────────────────────────────────────────────
     if (shape) {
       torqueSmoothed += (measured.torque - torqueSmoothed) * TORQUE_SMOOTHING;
+      peakSpeed = measured.peakSpeed;
 
       const inertiaMul = INERTIA_MIN + (INERTIA_MAX - INERTIA_MIN) * params.inertia;
       // A bigger shape is genuinely harder to turn: the slider multiplies the
@@ -1077,6 +1139,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
         angle,
         omega,
         torque: torqueSmoothed,
+        cflCells: peakSpeed * DT,
         settled: settledFor > SETTLED_FRAMES,
       };
     },
