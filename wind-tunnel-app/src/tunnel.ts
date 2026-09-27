@@ -102,6 +102,11 @@ export interface TunnelReadout {
   /** Reynolds number on the body's width. Indicative: it counts the grid's own
    *  numerical diffusion, which is an estimate. */
   reynolds: number;
+  /** The grid height this device was given, and the sub-steps it runs. */
+  grid: number;
+  subSteps: number;
+  /** What the startup probe measured, in texels shaded per millisecond. */
+  throughput: number;
 }
 
 export interface TunnelHandle {
@@ -121,8 +126,41 @@ export interface TunnelHandle {
 }
 
 // ── Grid and solver constants ───────────────────────────────────────────────
-const SIM_RESOLUTION = 180;
-const DYE_RESOLUTION = 420;
+/** The grid the solver's constants were measured on. Quantities calibrated
+ *  against it are normalised back to it rather than re-measured per tier. */
+const REFERENCE_GRID = 180;
+
+/**
+ * Candidate grid heights, coarsest first.
+ *
+ * Resolution is the one thing that buys visible turbulence, because the
+ * advection scheme's own diffusion falls with cell size — so a finer grid
+ * genuinely raises the Reynolds number the tunnel can reach, where asking the
+ * slider for less viscosity only saturates against it.
+ *
+ * It is not cheap. Cells go as the square, and a finer grid also needs a
+ * shorter timestep: velocity in cells per second is proportional to the grid
+ * height, so the same physical wind crosses more cells per step, and past about
+ * two the scheme is smearing again. Sub-stepping restores that and costs
+ * another multiple on top. The top tier here is roughly five times the work of
+ * the bottom one, which is why the device gets asked first.
+ */
+const RESOLUTION_TIERS = [180, 240, 320];
+/** Smoke is carried on its own finer grid; this is the ratio to the solver's. */
+const DYE_SCALE = 420 / 180;
+/** Cells of travel per step to stay under. */
+const CFL_TARGET = 2.2;
+
+/**
+ * Sub-steps per frame for a given grid height. Velocity in cells per second
+ * scales with the grid, so a finer grid covers more cells per step for the same
+ * physical wind; this splits the frame until the fastest the tunnel can be
+ * driven stays inside what the advection resolves.
+ */
+function subStepsFor(gridHeight: number): number {
+  const cellsPerStep = (WIND_MAX * gridHeight) / 60;
+  return Math.max(1, Math.ceil(cellsPerStep / CFL_TARGET));
+}
 /** The force field is summed by repeated 4x4 box passes, so it is a power of
  *  four on a side and the reduction divides exactly at every level. */
 const FORCE_RESOLUTION = 256;
@@ -151,7 +189,7 @@ const CURL_CAP = 900;
 // used to reach 6.5, and the clamp was the only thing standing in the way.
 // 190 bounds each component, so a diagonal velocity could still reach about 4.5
 // cells if anything ever pushed that hard. Nothing currently does.
-const SPEED_CAP = 190;
+const SPEED_CAP = 190 / REFERENCE_GRID;
 
 
 const INLET_WIDTH = 0.05;
@@ -164,41 +202,52 @@ const DPR = 1;
 const WARMUP_STEPS = 80;
 const DT = 1 / 60;
 
-// Slider ranges. The ceiling on wind is set by the advection step, not by
-// taste. Semi-Lagrangian advection never blows up, but past roughly two cells
-// of travel per step it stops resolving the flow and starts smearing it, and
-// the pressure field goes with it — measured drag on a disc was coming out
-// NEGATIVE at the old ceiling of 165. At 128 the same disc reads a steady
-// positive drag at every angle. A slider whose top half reports nonsense is
-// worse than a shorter slider.
-const WIND_MIN = 45;
-const WIND_MAX = 128;
-// Vorticity confinement is now a small FIXED amount, used for the one thing it
-// is actually for: partly undoing the numerical diffusion of the advection
-// scheme, so an eddy survives long enough to be seen. It is no longer wired to
-// any slider, because it was never a physical quantity and driving it was what
-// made the flow run away.
-const CURL_STRENGTH = 6;
+// ── Units ───────────────────────────────────────────────────────────────────
+// Everything below is in TUNNEL units — tunnel heights per second, tunnel
+// heights squared per second — and is converted to the solver's cell units at
+// the point of use, by multiplying by the grid height (velocity) or its square
+// (viscosity). That indirection is what lets the grid change with the device
+// without changing the physics: a wind of 0.7 means the same flow whether it is
+// resolved on 180 cells or 380.
+//
+// The ceiling on wind is set by the advection step, not by taste. Past roughly
+// two cells of travel per step the scheme stops resolving the flow and starts
+// smearing it, and the pressure field goes with it — measured drag on a disc
+// came out NEGATIVE at a higher ceiling, and steady and positive at this one.
+const WIND_MIN = 45 / REFERENCE_GRID;
+const WIND_MAX = 128 / REFERENCE_GRID;
+// Vorticity confinement, off.
+//
+// It went from being the turbulence slider, to a small fixed corrective, to
+// nothing — and the reason it is nothing is that MacCormack advection does the
+// job it was standing in for, honestly. Confinement existed to claw back detail
+// the first-order scheme smeared away, and it did that by adding energy in
+// proportion to the vorticity already present: a positive feedback with no
+// equilibrium, which is what ran away every time it was turned up. Measuring
+// the advection error and subtracting it removes the smearing at the source, so
+// there is nothing left to compensate for.
+//
+// The vorticity pass is still run, because it is also where the speed ceiling
+// is applied; with a strength of zero it costs two passes and adds no energy.
+const CURL_STRENGTH = 0;
 
 // Kinematic viscosity, in cells squared per second, at the laminar end of the
 // slider. At the other end the slider asks for zero and the flow is left to
 // whatever the grid itself imposes.
-const VISCOSITY_MAX = 90;
+const VISCOSITY_MAX = 90 / (REFERENCE_GRID * REFERENCE_GRID);
 /** Jacobi sweeps for the diffusion solve. Diffusion is a smooth operator and
  *  does not need the convergence the pressure solve does. */
 const VISCOSITY_ITERATIONS = 16;
 /**
- * The viscosity the slider can never go below, and the reason is a balance
- * rather than a preference. Vorticity confinement injects energy; viscous
- * diffusion removes it. Measured with the safety clamp lifted so the physics
- * had to hold on its own: at nu = 38 a confinement of 11 was fully held (peak
- * 1.9 cells per step), and at nu = 8 it was not (4.8 and climbing). Holding the
- * same ratio at the bottom of the range is what fixes these two numbers
- * together — drop either and the top of the slider runs away again.
+ * No floor. It existed only to give the vorticity confinement something to push
+ * against; with the confinement gone there is no energy source to balance, and
+ * the top of the slider can ask for genuinely inviscid air. Verified with the
+ * safety clamp lifted: the peak holds at about 2 cells of travel per step right
+ * across the slider, where it used to reach 6.5.
  */
-const VISCOSITY_FLOOR = 20;
+const VISCOSITY_FLOOR = 0;
 /** Below this the explicit solve costs more than it changes. */
-const VISCOSITY_MIN = 0.4;
+const VISCOSITY_MIN = 0.4 / (REFERENCE_GRID * REFERENCE_GRID);
 /**
  * The advection scheme's own diffusion, in the same units, as an order-of-
  * magnitude estimate for this grid. It exists whether or not any viscosity is
@@ -206,7 +255,14 @@ const VISCOSITY_MIN = 0.4;
  * against the SUM of the two and is indicative rather than calibrated: the
  * simulation cannot be made sharper than its own grid, only blunter.
  */
-const NUMERICAL_VISCOSITY = 18;
+/**
+ * The advection scheme's own diffusion, as a coefficient rather than a number:
+ * it is proportional to the flow speed and to the cell size, so on a finer grid
+ * it genuinely falls. That is the whole reason resolution buys turbulence.
+ * Calibrated at the reference grid, and indicative rather than measured — the
+ * Reynolds number shown to the viewer inherits that.
+ */
+const NUMERICAL_VISCOSITY_COEFF = 0.162;
 
 // Both of these come from a measured torque curve rather than a guess, which
 // is the only reason the body moves at all: swept through angle with its
@@ -302,6 +358,17 @@ in vec2 vUv; uniform sampler2D uTexture; uniform float value;
 out vec4 fragColor;
 void main () { fragColor = value * texture(uTexture, vUv); }`;
 
+/**
+ * Semi-Lagrangian advection: look back along the velocity to find where this
+ * parcel came from, and take its value.
+ *
+ * `texelSize` here is the VELOCITY grid's, never the target's, and that
+ * distinction was a real bug. Velocity is carried in cells per second of the
+ * simulation grid, so the distance a parcel travels is dt * u / simGridHeight
+ * whatever field is being carried. Passing the dye grid's texel size instead —
+ * 420 cells against the simulation's 180 — advected the smoke at 43% of the
+ * speed of the fluid it was supposed to be tracing.
+ */
 const ADVECTION_SHADER = `#version 300 es
 precision highp float; precision highp sampler2D;
 in vec2 vUv;
@@ -315,6 +382,62 @@ void main () {
   vec2 coord = vUv - dt * texture(uVelocity, vUv).xy * texelSize;
   vec4 result = texture(uSource, coord);
   fragColor = result / (1.0 + dissipation * dt);
+}`;
+
+/**
+ * The MacCormack correction, which is the whole reason this solver can show a
+ * wake at all.
+ *
+ * Plain semi-Lagrangian advection is first-order: every step it interpolates
+ * between grid values, and that interpolation is a low-pass filter. Applied
+ * sixty times a second it behaves exactly like a viscosity — one nobody asked
+ * for, which on a 180-cell grid was large enough to swamp any viscosity the
+ * slider set and hold the whole tunnel in the laminar regime.
+ *
+ * The trick is to measure that error rather than model it. Advect forward, then
+ * advect the result BACKWARD: with a perfect scheme you would land exactly
+ * where you started, so whatever you are off by is the error, and half of it
+ * subtracts out:
+ *
+ *     phi_new = phi_forward + (phi_original - phi_back_and_forth) / 2
+ *
+ * That is second-order accurate and costs two extra passes rather than the four
+ * times the cells a doubled grid would.
+ *
+ * The clamp at the end is not optional. The correction can overshoot into
+ * values that exist nowhere in the source field, which on a velocity field
+ * means invented energy; limiting it to the range of the four cells the forward
+ * trace interpolated between is what keeps it stable.
+ */
+const MACCORMACK_SHADER = `#version 300 es
+precision highp float; precision highp sampler2D;
+in vec2 vUv;
+uniform sampler2D uVelocity;
+uniform sampler2D uSource;
+uniform sampler2D uForward;
+uniform sampler2D uBackward;
+uniform vec2 texelSize;
+uniform vec2 uSourceTexel;
+uniform float dt;
+uniform float dissipation;
+out vec4 fragColor;
+void main () {
+  vec4 original = texture(uSource, vUv);
+  vec4 forward = texture(uForward, vUv);
+  vec4 back = texture(uBackward, vUv);
+  vec4 corrected = forward + 0.5 * (original - back);
+
+  // The four source cells the forward trace interpolated between.
+  vec2 coord = vUv - dt * texture(uVelocity, vUv).xy * texelSize;
+  vec2 base = (floor(coord / uSourceTexel - 0.5) + 0.5) * uSourceTexel;
+  vec4 s00 = texture(uSource, base);
+  vec4 s10 = texture(uSource, base + vec2(uSourceTexel.x, 0.0));
+  vec4 s01 = texture(uSource, base + vec2(0.0, uSourceTexel.y));
+  vec4 s11 = texture(uSource, base + uSourceTexel);
+  vec4 lo = min(min(s00, s10), min(s01, s11));
+  vec4 hi = max(max(s00, s10), max(s01, s11));
+
+  fragColor = clamp(corrected, lo, hi) / (1.0 + dissipation * dt);
 }`;
 
 // Bottom inlet, top outlet. Mode 0 sets velocity (a boundary condition, so it
@@ -829,14 +952,106 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
       : { width: Math.round(resolution), height: Math.round(resolution / aspect) };
   }
 
-  const simGrid = gridFor(SIM_RESOLUTION);
-  const dyeGrid = gridFor(DYE_RESOLUTION);
+  /**
+   * Rough GPU throughput, in texels shaded per millisecond.
+   *
+   * Timed around a batch of full-screen passes with a one-pixel readback at the
+   * end, because readPixels is what forces the queue to actually finish —
+   * without it this would be timing command submission, not work. The first
+   * batch is discarded: it pays for shader compilation and pipeline warm-up.
+   *
+   * This is an estimate, and deliberately a conservative one. It distinguishes
+   * an integrated laptop GPU from a discrete or Apple Silicon one, which is all
+   * the tiering needs; it is not a benchmark.
+   */
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, BASE_VERTEX_SHADER);
+
+  function probeThroughput(): number {
+    const size = 512;
+    // Its own program, because this runs before the solver's are built, and its
+    // own try/catch, because a device that cannot complete the probe should
+    // quietly get the smallest grid rather than no simulation at all.
+    try {
+      // The pressure solve is 40 of the ~70 passes in a step, so it is what
+      // the estimate should be built on. A one-tap shader measures bandwidth
+      // this workload never sees and flatters a slow device badly — a software
+      // rasteriser came out fast enough for the top tier.
+      const probeProgram = new Program(gl!, vertexShader, PRESSURE_SHADER);
+      // Two targets, alternating. Rendering into the same texture being sampled
+      // is undefined behaviour, and drivers are entitled to short-circuit it —
+      // this probe reported an impossible three billion texels a second on a
+      // software rasteriser until it ping-ponged properly.
+      const probeA = createFBO(size, size, gl!.RGBA32F, gl!.RGBA, gl!.FLOAT, gl!.NEAREST);
+      const probeB = createFBO(size, size, gl!.RGBA32F, gl!.RGBA, gl!.FLOAT, gl!.NEAREST);
+      const scratch = new Float32Array(4);
+      const run = (passes: number) => {
+        probeProgram.bind();
+        gl!.uniform2f(probeProgram.uniforms.texelSize!, 1 / size, 1 / size);
+        let src = probeA;
+        let dst = probeB;
+        for (let i = 0; i < passes; i++) {
+          gl!.uniform1i(probeProgram.uniforms.uPressure!, src.attach(0));
+          gl!.uniform1i(probeProgram.uniforms.uDivergence!, src.attach(1));
+          blit(dst);
+          const t = src;
+          src = dst;
+          dst = t;
+        }
+        // readPixels is what forces the queue to finish. Without it this would
+        // be timing command submission, not work.
+        gl!.bindFramebuffer(gl!.FRAMEBUFFER, src.fbo);
+        gl!.readPixels(0, 0, 1, 1, gl!.RGBA, gl!.FLOAT, scratch);
+      };
+
+      run(24); // discarded: pays for shader compilation and pipeline warm-up
+      const start = performance.now();
+      const passes = 180;
+      run(passes);
+      const elapsed = Math.max(performance.now() - start, 0.01);
+      return (passes * size * size) / elapsed;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Picks the finest grid whose estimated frame cost fits the budget.
+   *
+   * A simulation step is around 70 full-grid passes (most of them the pressure
+   * solve), plus three on the dye grid, which has DYE_SCALE^2 times the cells.
+   */
+  function chooseResolution(throughput: number): number {
+    if (!isFinite(throughput) || throughput <= 0) return RESOLUTION_TIERS[0];
+
+    const aspect = canvasAspect();
+    const budgetMs = 7;
+    let chosen = RESOLUTION_TIERS[0];
+    for (const tier of RESOLUTION_TIERS) {
+      const cells = tier * tier * Math.max(aspect, 1 / aspect);
+      const passes = 70 + 3 * DYE_SCALE * DYE_SCALE;
+      const steps = subStepsFor(tier);
+      const costMs = (cells * passes * steps) / throughput;
+      if (costMs <= budgetMs) chosen = tier;
+    }
+    return chosen;
+  }
+
+  const measuredThroughput = probeThroughput();
+  const simResolution = chooseResolution(measuredThroughput);
+  const subSteps = subStepsFor(simResolution);
+  const simGrid = gridFor(simResolution);
+  const dyeGrid = gridFor(Math.round(simResolution * DYE_SCALE));
 
   const velocity = createDoubleFBO(simGrid.width, simGrid.height, gl.RG16F, gl.RG, gl.HALF_FLOAT, linear);
   const dye = createDoubleFBO(dyeGrid.width, dyeGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, linear);
   const divergence = createFBO(simGrid.width, simGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
   const curlField = createFBO(simGrid.width, simGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, gl.NEAREST);
   const viscositySource = createFBO(simGrid.width, simGrid.height, gl.RG16F, gl.RG, gl.HALF_FLOAT, gl.NEAREST);
+  // The forward and back-and-forth passes MacCormack needs, one pair per field.
+  const velForward = createFBO(simGrid.width, simGrid.height, gl.RG16F, gl.RG, gl.HALF_FLOAT, linear);
+  const velBack = createFBO(simGrid.width, simGrid.height, gl.RG16F, gl.RG, gl.HALF_FLOAT, linear);
+  const dyeForward = createFBO(dyeGrid.width, dyeGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, linear);
+  const dyeBack = createFBO(dyeGrid.width, dyeGrid.height, gl.R16F, gl.RED, gl.HALF_FLOAT, linear);
   // Full float, and linear because the force pass samples it on its own grid
   // rather than this one. Half precision costs about three decimal digits, and
   // the quantity being integrated is a small difference across the body's
@@ -868,9 +1083,9 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([0]));
 
-  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, BASE_VERTEX_SHADER);
   const clearProgram = new Program(gl, vertexShader, CLEAR_SHADER);
   const advectionProgram = new Program(gl, vertexShader, ADVECTION_SHADER);
+  const macCormackProgram = new Program(gl, vertexShader, MACCORMACK_SHADER);
   const inletProgram = new Program(gl, vertexShader, INLET_SHADER);
   const divergenceProgram = new Program(gl, vertexShader, DIVERGENCE_SHADER);
   const curlProgram = new Program(gl, vertexShader, CURL_SHADER);
@@ -934,8 +1149,14 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform1f(p.uniforms.uHasBody!, shape ? 1 : 0);
   }
 
-  function windSpeed() {
+  /** Tunnel heights per second. */
+  function windPhysical() {
     return WIND_MIN + (WIND_MAX - WIND_MIN) * params.wind;
+  }
+
+  /** The same speed in the solver's units: cells per second. */
+  function windSpeed() {
+    return windPhysical() * simGrid.height;
   }
 
   function runInlet(target: DoubleFBO, mode: 0 | 1) {
@@ -953,22 +1174,38 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
 
   /** Kinematic viscosity the slider is currently asking for. Squared so the
    *  interesting, nearly-inviscid end of the range gets most of the travel. */
-  function viscosity() {
+  /** Tunnel heights squared per second. */
+  function viscosityPhysical() {
     const t = 1 - params.turbulence;
     return VISCOSITY_FLOOR + (VISCOSITY_MAX - VISCOSITY_FLOOR) * t * t;
+  }
+
+  /** The same, in cells squared per second. */
+  function viscosity() {
+    return viscosityPhysical() * simGrid.height * simGrid.height;
+  }
+
+  /** What the grid imposes whatever the slider asks for: proportional to speed
+   *  and to cell size, so it halves when the grid doubles. */
+  function numericalViscosity() {
+    return (NUMERICAL_VISCOSITY_COEFF * windPhysical()) / simGrid.height;
   }
 
   /** Reynolds number, on the body's own width, against the total viscosity —
    *  what the slider adds plus what the grid imposes regardless. */
   function reynolds() {
     if (!shape) return 0;
-    const diameter = 2 * shape.radius * simGrid.height;
-    return (windSpeed() * diameter) / (viscosity() + NUMERICAL_VISCOSITY);
+    // All three in tunnel units, so the grid cancels out of the ratio as it
+    // should — except through the numerical viscosity, where it belongs.
+    return (
+      (windPhysical() * 2 * shape.radius) /
+      (viscosityPhysical() + numericalViscosity())
+    );
   }
 
   function diffuse(dt: number) {
     const nu = viscosity();
-    if (nu < VISCOSITY_MIN) return;
+    if (viscosityPhysical() < VISCOSITY_MIN) return;
 
     // Keep the pre-diffusion field: every Jacobi sweep needs it as the
     // right-hand side, not just the previous iterate.
@@ -988,6 +1225,47 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
       blit(velocity.write);
       velocity.swap();
     }
+  }
+
+  /**
+   * Advects `field` through the velocity field, second-order. `forward` and
+   * `back` are scratch targets matching the field's own grid.
+   */
+  function advect(
+    field: DoubleFBO,
+    forward: FBO,
+    back: FBO,
+    dissipation: number,
+    dt: number,
+  ) {
+    advectionProgram.bind();
+    // Always the velocity grid's texel size: that is what sets how far a parcel
+    // moves, whichever field is being carried.
+    gl!.uniform2f(advectionProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
+    gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
+    gl!.uniform1f(advectionProgram.uniforms.dissipation!, 0);
+
+    gl!.uniform1i(advectionProgram.uniforms.uSource!, field.read.attach(1));
+    gl!.uniform1f(advectionProgram.uniforms.dt!, dt);
+    blit(forward);
+
+    // Back along the same velocity field. Where this lands short of where we
+    // started is the scheme's own error.
+    gl!.uniform1i(advectionProgram.uniforms.uSource!, forward.attach(1));
+    gl!.uniform1f(advectionProgram.uniforms.dt!, -dt);
+    blit(back);
+
+    macCormackProgram.bind();
+    gl!.uniform2f(macCormackProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
+    gl!.uniform2f(macCormackProgram.uniforms.uSourceTexel!, field.texelSizeX, field.texelSizeY);
+    gl!.uniform1i(macCormackProgram.uniforms.uVelocity!, velocity.read.attach(0));
+    gl!.uniform1i(macCormackProgram.uniforms.uSource!, field.read.attach(1));
+    gl!.uniform1i(macCormackProgram.uniforms.uForward!, forward.attach(2));
+    gl!.uniform1i(macCormackProgram.uniforms.uBackward!, back.attach(3));
+    gl!.uniform1f(macCormackProgram.uniforms.dt!, dt);
+    gl!.uniform1f(macCormackProgram.uniforms.dissipation!, dissipation);
+    blit(field.write);
+    field.swap();
   }
 
   function applyBody() {
@@ -1035,7 +1313,13 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     // Each force texel stands for this much tunnel area.
     const cellArea = (aspect / FORCE_RESOLUTION) * (1 / FORCE_RESOLUTION);
     // Solver velocity is gridHeight x tunnel speed, and force is linear in it.
-    return { torque: readBuffer[0] * (cellArea / simGrid.height), peakSpeed: readBuffer[1] };
+    // The measured torque scales with the grid: the projection's pressure is in
+    // solver velocity units, which are proportional to the grid height, and the
+    // coverage gradient carries another factor of it. Left alone, the same
+    // shape would turn harder on a machine that earned a finer grid. Normalised
+    // back to the grid the rotation constants were calibrated on.
+    const scale = (cellArea / simGrid.height) * (REFERENCE_GRID / simGrid.height);
+    return { torque: readBuffer[0] * scale, peakSpeed: readBuffer[1] };
   }
 
   function step(dt: number) {
@@ -1054,22 +1338,15 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform1i(vorticityProgram.uniforms.uCurl!, curlField.attach(1));
     gl!.uniform1f(vorticityProgram.uniforms.curl!, CURL_STRENGTH);
     gl!.uniform1f(vorticityProgram.uniforms.curlCap!, CURL_CAP);
-    gl!.uniform1f(vorticityProgram.uniforms.speedCap!, SPEED_CAP);
+    gl!.uniform1f(vorticityProgram.uniforms.speedCap!, SPEED_CAP * simGrid.height);
     gl!.uniform1f(vorticityProgram.uniforms.dt!, dt);
     blit(velocity.write);
     velocity.swap();
 
-    advectionProgram.bind();
-    gl!.uniform2f(advectionProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
-    gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
-    gl!.uniform1i(advectionProgram.uniforms.uSource!, velocity.read.attach(0));
-    gl!.uniform1f(advectionProgram.uniforms.dt!, dt);
     // A small fixed bleed. This is a linear drag, not viscosity — it damps every
     // scale equally — so it is kept low and left alone; the diffusion step below
     // is what the slider moves.
-    gl!.uniform1f(advectionProgram.uniforms.dissipation!, VELOCITY_DISSIPATION);
-    blit(velocity.write);
-    velocity.swap();
+    advect(velocity, velForward, velBack, VELOCITY_DISSIPATION, dt);
 
     diffuse(dt);
     runInlet(velocity, 0);
@@ -1100,7 +1377,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     gl!.uniform2f(gradientProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1i(gradientProgram.uniforms.uPressure!, pressure.read.attach(0));
     gl!.uniform1i(gradientProgram.uniforms.uVelocity!, velocity.read.attach(1));
-    gl!.uniform1f(gradientProgram.uniforms.speedCap!, SPEED_CAP);
+    gl!.uniform1f(gradientProgram.uniforms.speedCap!, SPEED_CAP * simGrid.height);
     blit(velocity.write);
     velocity.swap();
 
@@ -1115,14 +1392,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
 
     // ── Smoke ─────────────────────────────────────────────────────────────
     gl!.viewport(0, 0, dyeGrid.width, dyeGrid.height);
-    advectionProgram.bind();
-    gl!.uniform2f(advectionProgram.uniforms.texelSize!, dye.texelSizeX, dye.texelSizeY);
-    gl!.uniform1i(advectionProgram.uniforms.uVelocity!, velocity.read.attach(0));
-    gl!.uniform1i(advectionProgram.uniforms.uSource!, dye.read.attach(1));
-    gl!.uniform1f(advectionProgram.uniforms.dt!, dt);
-    gl!.uniform1f(advectionProgram.uniforms.dissipation!, DENSITY_DISSIPATION);
-    blit(dye.write);
-    dye.swap();
+    advect(dye, dyeForward, dyeBack, DENSITY_DISSIPATION, dt);
     runInlet(dye, 1);
 
     dyeMaskProgram.bind();
@@ -1192,11 +1462,12 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     // because the tunnel's aspect ratio is pinned in CSS: the drawing buffer
     // changes resolution, never shape, and the flow carries on undisturbed.
     sizeCanvas();
-    step(DT);
+    // One frame of simulated time, however many sub-steps this grid needs.
+    for (let i = 0; i < subSteps; i++) step(DT / subSteps);
     render();
   }
 
-  for (let i = 0; i < WARMUP_STEPS; i++) step(DT);
+  for (let i = 0; i < WARMUP_STEPS * subSteps; i++) step(DT / subSteps);
   render();
   rafId = requestAnimationFrame(frame);
 
@@ -1229,10 +1500,10 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     resetFlow() {
       clearField();
       omega = 0;
-      for (let i = 0; i < WARMUP_STEPS; i++) step(DT);
+      for (let i = 0; i < WARMUP_STEPS * subSteps; i++) step(DT / subSteps);
     },
     advance(steps) {
-      for (let i = 0; i < steps; i++) step(DT);
+      for (let i = 0; i < steps * subSteps; i++) step(DT / subSteps);
       render();
     },
     setAngle(radians) {
@@ -1246,8 +1517,11 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
         angle,
         omega,
         torque: torqueSmoothed,
-        cflCells: peakSpeed * DT,
+        cflCells: (peakSpeed * DT) / subSteps,
         reynolds: reynolds(),
+        grid: simGrid.height,
+        subSteps,
+        throughput: measuredThroughput,
         settled: settledFor > SETTLED_FRAMES,
       };
     },
