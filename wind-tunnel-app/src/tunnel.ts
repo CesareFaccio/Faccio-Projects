@@ -239,13 +239,26 @@ const VISCOSITY_MAX = 90 / (REFERENCE_GRID * REFERENCE_GRID);
  *  does not need the convergence the pressure solve does. */
 const VISCOSITY_ITERATIONS = 16;
 /**
- * No floor. It existed only to give the vorticity confinement something to push
- * against; with the confinement gone there is no energy source to balance, and
- * the top of the slider can ask for genuinely inviscid air. Verified with the
- * safety clamp lifted: the peak holds at about 2 cells of travel per step right
- * across the slider, where it used to reach 6.5.
+ * The largest cell Reynolds number the grid is allowed to run at.
+ *
+ * This replaces a fixed viscosity floor, and the difference matters. You cannot
+ * simulate an inviscid fluid on a finite grid: with nothing to dissipate at the
+ * small scales, a bluff-body wake keeps rolling vorticity up into structures
+ * finer than the cells, and the local velocity climbs until it hits the speed
+ * clamp. That is what an intermittent "uncontrolled build-up" looks like — the
+ * spikes measured at the top of the slider were 3.2 to 3.3 cells of travel per
+ * step against a clamp at 3.17, i.e. the flow pressed against the ceiling and
+ * was being truncated.
+ *
+ * So the floor is stated as a resolution condition rather than a number: the
+ * viscosity is never allowed below wind / CELL_REYNOLDS_MAX, which is exactly
+ * the statement that a cell must be able to resolve what it is being asked to
+ * carry. Being grid- and wind-aware is the point — a finer grid carries more
+ * cells per unit length, so the same condition permits a lower PHYSICAL
+ * viscosity and a higher Reynolds number, which is how the device tiers buy
+ * turbulence rather than just pixels.
  */
-const VISCOSITY_FLOOR = 0;
+const CELL_REYNOLDS_MAX = 15;
 /** Below this the explicit solve costs more than it changes. */
 const VISCOSITY_MIN = 0.4 / (REFERENCE_GRID * REFERENCE_GRID);
 /**
@@ -1174,10 +1187,18 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
 
   /** Kinematic viscosity the slider is currently asking for. Squared so the
    *  interesting, nearly-inviscid end of the range gets most of the travel. */
+  /** The least viscosity this grid can carry at the current wind, in tunnel
+   *  units. Below it the flow develops structure the cells cannot represent. */
+  function viscosityFloor() {
+    const windCells = windPhysical() * simGrid.height;
+    const floorCells = windCells / CELL_REYNOLDS_MAX;
+    return floorCells / (simGrid.height * simGrid.height);
+  }
+
   /** Tunnel heights squared per second. */
   function viscosityPhysical() {
     const t = 1 - params.turbulence;
-    return VISCOSITY_FLOOR + (VISCOSITY_MAX - VISCOSITY_FLOOR) * t * t;
+    return Math.max(VISCOSITY_MAX * t * t, viscosityFloor());
   }
 
   /** The same, in cells squared per second. */

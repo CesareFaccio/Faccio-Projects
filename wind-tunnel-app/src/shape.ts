@@ -35,6 +35,8 @@ export interface Shape {
   maskSize: number;
   /** Half-width of the mask, in tunnel units. */
   extent: number;
+  /** True when the drawing was larger than the tunnel allows and was shrunk. */
+  rescaled: boolean;
 }
 
 /** Working resolution for measuring. Fine enough that the second moment of a
@@ -49,6 +51,23 @@ const MASK_SIZE = 256;
 const MASK_FILL = 0.86;
 /** Below this the drawing was a stray click, or a line enclosing nothing. */
 const MIN_AREA = 0.00035;
+/**
+ * The furthest any part of the body may sit from the pivot, in tunnel units.
+ *
+ * The pivot is pinned at mid-height, so this keeps the body clear of both ends
+ * of the tunnel — the prescribed inflow in the bottom 0.05, and the open
+ * outflow at the top, where the pressure is pinned to zero. A body reaching
+ * into either fights a boundary condition rather than the flow, and the
+ * pressure solve answers with very large local velocities: an ellipse drawn
+ * long enough to span 0.08 to 0.92 pushed the peak flow to 3.3 cells per
+ * advection step against a nominal limit of about 2, which is what an
+ * uncontrolled build-up of turbulence looks like from the outside.
+ *
+ * A shape drawn bigger than this is scaled down to fit rather than rejected;
+ * being told "too big" after drawing something is a worse answer than being
+ * given a slightly smaller version of it.
+ */
+const MAX_RADIUS = 0.33;
 
 function fillPath(ctx: CanvasRenderingContext2D, path: Vec2[], toPixel: (p: Vec2) => Vec2) {
   ctx.beginPath();
@@ -71,6 +90,10 @@ function fillPath(ctx: CanvasRenderingContext2D, path: Vec2[], toPixel: (p: Vec2
  * width in those units.
  */
 export function buildShape(path: Vec2[], aspect: number): Shape | null {
+  return buildShapeInner(path, aspect, true);
+}
+
+function buildShapeInner(path: Vec2[], aspect: number, mayRescale: boolean): Shape | null {
   if (path.length < 3) return null;
 
   // ── Pass 1: draw it where it was drawn, and measure ──────────────────────
@@ -134,6 +157,18 @@ export function buildShape(path: Vec2[], aspect: number): Shape | null {
   const radius = Math.sqrt(maxR2);
   if (!(radius > 0)) return null;
 
+  // Too big for the tunnel: shrink it about its own centroid and start again,
+  // so every derived quantity is measured from the shape that will actually be
+  // simulated rather than scaled after the fact.
+  if (mayRescale && radius > MAX_RADIUS) {
+    const k = MAX_RADIUS / radius;
+    const shrunk = path.map((q) => ({
+      x: centroid.x + (q.x - centroid.x) * k,
+      y: centroid.y + (q.y - centroid.y) * k,
+    }));
+    return buildShapeInner(shrunk, aspect, false);
+  }
+
   // The long axis is the principal direction of greatest spread — the larger
   // eigenvector of the covariance of the covered pixels.
   const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
@@ -169,7 +204,10 @@ export function buildShape(path: Vec2[], aspect: number): Shape | null {
   const mask = new Uint8Array(MASK_SIZE * MASK_SIZE);
   for (let i = 0; i < mask.length; i++) mask[i] = maskData[i * 4 + 3];
 
-  return { centroid, area, polarMoment, radius, axis, mask, maskSize: MASK_SIZE, extent };
+  return {
+    centroid, area, polarMoment, radius, axis, mask,
+    maskSize: MASK_SIZE, extent, rescaled: !mayRescale,
+  };
 }
 
 /** Closed outlines to open with, in tunnel units, so the tunnel is running

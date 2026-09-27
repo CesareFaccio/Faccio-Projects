@@ -64,7 +64,9 @@ function applyShape(path: Vec2[]) {
   }
   tunnel.setShape(shape);
   trace.clear();
-  tunnelStatus.textContent = "Air runs bottom to top. The shape is pinned at the cross and free to turn.";
+  tunnelStatus.textContent = shape.rescaled
+    ? "Scaled down to fit the tunnel \u2014 a shape reaching the ends fights the inflow rather than the air."
+    : "Air runs bottom to top. The shape is pinned at the cross and free to turn.";
 }
 
 function start(t: TunnelHandle) {
