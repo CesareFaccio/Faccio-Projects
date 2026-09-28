@@ -79,6 +79,16 @@
           &ldquo;High Efficiency&rdquo; &mdash; HEVC video can&rsquo;t be played by most browsers.
         </div>
 
+        <div class="weight-field">
+          <label for="opt-body-weight">Your body weight (kg)</label>
+          <input id="opt-body-weight" type="number" step="0.5" inputmode="decimal" />
+          <span class="settings-hint">
+            Only scales the readouts into kilograms &mdash; the percentages, the detected
+            holds and the balance point don&rsquo;t depend on it. Change it at any time and
+            the figures rescale straight away.
+          </span>
+        </div>
+
         <div id="dropzone" class="dropzone">
           <p>Click or drop a video file here</p>
           <input id="file-input" type="file" accept="video/*" hidden />

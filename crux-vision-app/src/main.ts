@@ -2,7 +2,12 @@ import { extractPose, UnsupportedVideoError } from "./poseExtraction";
 import type { PoseData, FrameEntry } from "./types";
 import { computeAnalysis, DEFAULT_ANALYSIS_OPTIONS } from "./analysis";
 import type { AnalysisResult, AnalysisOptions } from "./analysis";
-import { computeWeightDistribution } from "./forces";
+import {
+  computeWeightDistribution,
+  DEFAULT_BODY_WEIGHT_KG,
+  MIN_BODY_WEIGHT_KG,
+  MAX_BODY_WEIGHT_KG,
+} from "./forces";
 import { computeMotion } from "./motion";
 import type { MotionFrameEntry } from "./motion";
 import { buildSmoothedWeightByFrame, renderPlusOverlay } from "./plusRender";
@@ -32,6 +37,7 @@ const applySettingsBtn = document.getElementById("apply-settings") as HTMLButton
 const settingsNoteEl = document.getElementById("settings-note") as HTMLParagraphElement;
 const demoSectionEl = document.getElementById("demo-section") as HTMLElement;
 const demoVideoEl = document.getElementById("demo-video") as HTMLVideoElement;
+const optBodyWeightEl = document.getElementById("opt-body-weight") as HTMLInputElement;
 
 const DOWNLOAD_VIDEO_DEFAULT_LABEL = "Download video with overlay";
 // Pre-rendered example analysis, played as an ordinary <video> the instant
@@ -83,6 +89,19 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 /**
+ * The body weight to report figures against, in kilograms.
+ *
+ * Clamped rather than rejected: a blank or nonsense field should fall back to
+ * something sensible and let the analysis run, not block it. The input's own
+ * bounds are set from the same constants at start-up, so the two can't drift.
+ */
+function readBodyWeight(): number {
+  const kg = parseFloat(optBodyWeightEl.value);
+  if (!Number.isFinite(kg)) return DEFAULT_BODY_WEIGHT_KG;
+  return Math.min(MAX_BODY_WEIGHT_KG, Math.max(MIN_BODY_WEIGHT_KG, kg));
+}
+
+/**
  * Runs the full hold/CoM/force/motion analysis pipeline for the given pose
  * data and options, updating all the module-level analysis state and debug
  * hooks. Shared by the initial post-extraction run and by the "Apply &
@@ -91,7 +110,7 @@ function triggerDownload(blob: Blob, filename: string) {
  */
 function runAnalysis(data: PoseData, options: AnalysisOptions) {
   currentAnalysis = computeAnalysis(data, options);
-  const weight = computeWeightDistribution(data, currentAnalysis);
+  const weight = computeWeightDistribution(data, currentAnalysis, readBodyWeight());
   currentWeightByFrame = buildSmoothedWeightByFrame(weight);
   const motionArr = computeMotion(currentAnalysis.com, data.video.fps);
   currentMotionByFrame = motionArr
@@ -306,6 +325,31 @@ async function handleFile(file: File) {
   }
 }
 
+/**
+ * Re-labels the existing analysis for a new body weight.
+ *
+ * None of the physics depends on it: holds, percentages, centre of mass and
+ * joint angles all come out of a solve done in fractions of body weight. So
+ * this re-runs the force distribution alone — milliseconds over the frames
+ * already extracted — rather than the whole pipeline, and pose extraction (the
+ * part that costs a minute) is never touched.
+ */
+function applyBodyWeight() {
+  if (!currentPoseData || !currentAnalysis) return;
+  const weight = computeWeightDistribution(currentPoseData, currentAnalysis, readBodyWeight());
+  currentWeightByFrame = buildSmoothedWeightByFrame(weight);
+  (window as any).__cruxVisionWeight = weight; // debugging convenience
+  (window as any).__cruxVisionWeightByFrame = currentWeightByFrame; // debugging convenience
+  // A playing loop redraws on its own next tick; a paused one needs telling.
+  if (!activeVideoEl || activeVideoEl.paused) drawCurrentFrame();
+}
+
+optBodyWeightEl.addEventListener("change", () => {
+  const kg = readBodyWeight();
+  optBodyWeightEl.value = String(kg); // show any clamping that happened
+  applyBodyWeight();
+});
+
 applySettingsBtn.addEventListener("click", () => {
   if (!currentPoseData || isBusy) return;
   const options = readSettingsInputs(currentPoseData.video.fps);
@@ -498,6 +542,12 @@ function startDemo() {
     demoVideoEl.controls = true;
   });
 }
+
+// The input's bounds and starting value come from the model's own constants,
+// so there is one place to change them.
+optBodyWeightEl.min = String(MIN_BODY_WEIGHT_KG);
+optBodyWeightEl.max = String(MAX_BODY_WEIGHT_KG);
+optBodyWeightEl.value = String(DEFAULT_BODY_WEIGHT_KG);
 
 startDemo();
 

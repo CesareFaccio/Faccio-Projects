@@ -224,6 +224,37 @@ h1 {
   background: repeating-linear-gradient(45deg, #fff 0 4px, #e4e4e4 4px 8px);
 }
 
+/* ── Body weight ───────────────────────────────────────────────────── */
+/* Deliberately out here rather than in the settings panel: that panel is hidden
+   until a video has been analysed, so anything living in it arrives too late to
+   affect the first set of numbers a visitor sees. */
+.weight-field {
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 62ch;
+}
+.weight-field label {
+  font-family: var(--ui);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  font-size: 11px;
+  font-weight: 700;
+}
+.weight-field input {
+  align-self: flex-start;
+  width: 9ch;
+  padding: 4px 6px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 12px;
+}
+.weight-field input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+.weight-field .settings-hint { max-width: 58ch; }
+
 /* ── Dropzone ─────────────────────────────────────────────────────────────── */
 .dropzone {
   border: 2px dashed var(--ink);

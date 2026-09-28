@@ -8,7 +8,24 @@
 import type { FrameEntry, PoseData } from "./types";
 import type { AnalysisResult, Hold } from "./analysis";
 
-const BODY_WEIGHT_KG = 70.0;
+/**
+ * The body weight assumed when the visitor hasn't told us theirs.
+ *
+ * Weight enters this model only at the very end, as a scale factor. The
+ * equilibrium solve below works entirely in FRACTIONS of body weight, so the
+ * percentages, the force distribution across holds, the limb geometry and the
+ * joint angles are all independent of it; it converts those fractions into
+ * kilograms and does nothing else. That is why changing it costs a re-scale
+ * rather than a re-analysis — no holds are re-detected and nothing is re-solved.
+ */
+export const DEFAULT_BODY_WEIGHT_KG = 70.0;
+/**
+ * The range the input accepts. Not a judgement about who climbs — it is where
+ * the kilogram readouts stay meaningful, and a guard against a stray keystroke
+ * turning every label into a five-digit number.
+ */
+export const MIN_BODY_WEIGHT_KG = 20;
+export const MAX_BODY_WEIGHT_KG = 200;
 const UPWARD: [number, number] = [0.0, -1.0];
 
 export const EXTREMITY_NAMES = ["left_hand", "right_hand", "left_foot", "right_foot"] as const;
@@ -258,8 +275,17 @@ function loadActiveHoldsByFrame(
   return active;
 }
 
-/** Runs the full stats1.py weight-distribution/limb-force/joint-angle pipeline. */
-export function computeWeightDistribution(poseData: PoseData, analysis: AnalysisResult): WeightResult {
+/**
+ * Runs the full stats1.py weight-distribution/limb-force/joint-angle pipeline.
+ *
+ * `bodyWeightKg` scales the kilogram fields only; every percentage this returns
+ * is the same whatever is passed.
+ */
+export function computeWeightDistribution(
+  poseData: PoseData,
+  analysis: AnalysisResult,
+  bodyWeightKg: number = DEFAULT_BODY_WEIGHT_KG,
+): WeightResult {
   const { fps, total_frames } = poseData.video;
   const frames = poseData.landmarks;
 
@@ -295,9 +321,9 @@ export function computeWeightDistribution(poseData: PoseData, analysis: Analysis
       if (fr) {
         extremities[name] = {
           active: true,
-          axial_kg: round3(fr.axial * BODY_WEIGHT_KG),
+          axial_kg: round3(fr.axial * bodyWeightKg),
           axial_pct: round3(fr.axial * 100),
-          vertical_kg: round3(fr.vertical * BODY_WEIGHT_KG),
+          vertical_kg: round3(fr.vertical * bodyWeightKg),
           vertical_pct: round3(fr.vertical * 100),
         };
       } else {
@@ -319,7 +345,7 @@ export function computeWeightDistribution(poseData: PoseData, analysis: Analysis
       const s = segments[seg.name];
       if (s && s.axial_frac !== null) {
         limbSegments[seg.name] = {
-          axial_kg: round3(s.axial_frac * BODY_WEIGHT_KG),
+          axial_kg: round3(s.axial_frac * bodyWeightKg),
           axial_pct: round3(s.axial_frac * 100),
           angle_deg: s.angle_deg,
         };
@@ -343,5 +369,5 @@ export function computeWeightDistribution(poseData: PoseData, analysis: Analysis
     });
   }
 
-  return { body_weight_kg: BODY_WEIGHT_KG, frames_with_contact: framesWithAnyContact, per_frame: perFrame };
+  return { body_weight_kg: bodyWeightKg, frames_with_contact: framesWithAnyContact, per_frame: perFrame };
 }

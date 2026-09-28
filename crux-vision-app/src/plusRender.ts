@@ -132,7 +132,10 @@ export function buildSmoothedWeightByFrame(weight: WeightResult): Map<number, Sm
       }
       const prevPct = emaSeg.get(segName);
       const sPct = ema(prevPct, seg.axial_pct, SMOOTHING_ALPHA);
-      const bw = seg.axial_pct !== 0 ? seg.axial_kg / (seg.axial_pct / 100) : 70.0;
+      // Previously recovered by dividing the segment's kg by its own
+      // percentage, which fell apart at zero load and carried the rounding of
+      // both fields. The weight is right here on the result.
+      const bw = weight.body_weight_kg;
       emaSeg.set(segName, sPct);
       limbSegments[segName] = { axial_pct: sPct, axial_kg: (sPct / 100) * bw, angle_deg: seg.angle_deg };
     }
