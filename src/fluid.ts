@@ -94,6 +94,29 @@ const POINTER_DYE = 0.09;
 const INLET_SPEED = 130; // sim units; well inside the CFL limit
 const INLET_DYE_RATE = 0.40; // dye per second at the rakes
 const INLET_WIDTH = 0.05; // how far in from the left the inflow is imposed
+/**
+ * How far in from the right edge reverse flow is bled away.
+ *
+ * The outflow is open: the velocity condition is zero-gradient and the
+ * pressure is pinned to zero there, which is what lets fluid leave instead of
+ * piling up. The catch is that those two conditions say nothing about which
+ * WAY fluid crosses the boundary, so a disturbance that arrives moving
+ * leftwards turns the outlet into an inlet, and one that costs no pressure to
+ * feed. Nothing then pushes it back: the channel settles into a second stable
+ * state running backwards, and stays there.
+ *
+ * That was not a theory. A cursor stroke dragged leftwards near the right edge
+ * flipped the whole channel, and six seconds later the mean horizontal
+ * velocity was still -130 against an inflow of +130, with 83 of 96 rows at the
+ * outlet flowing inwards. It never recovered on its own.
+ *
+ * So the outlet is allowed to let fluid out and not to suck it in: inside this
+ * band, only the negative part of the horizontal velocity is damped, ramped
+ * from nothing at the inner edge to full at the boundary. It is one-sided, so
+ * it cannot drive the flow; it can only refuse to be driven. Width barely
+ * matters (0.04 and 0.20 both hold), so it is kept narrow.
+ */
+const OUTFLOW_BAND = 0.06;
 const RAKE_COUNT = 24; // horizontal smoke lines seeded at the inlet
 const OBSTACLE_COUNT = 7; // cylinders spanning the channel
 const OBSTACLE_X = 0.17; // their distance from the left edge
@@ -261,6 +284,8 @@ precision highp float; precision highp sampler2D;
 in vec2 vUv; in vec2 vL; in vec2 vR; in vec2 vT; in vec2 vB;
 uniform sampler2D uPressure;
 uniform sampler2D uVelocity;
+uniform float speedCap;
+uniform float outflowBand;
 out vec4 fragColor;
 void main () {
   float L = texture(uPressure, vL).x;
@@ -269,6 +294,20 @@ void main () {
   float B = texture(uPressure, vB).x;
   vec2 velocity = texture(uVelocity, vUv).xy;
   velocity -= vec2(R - L, T - B);
+
+  // See OUTFLOW_BAND. Only the backwards half of the horizontal velocity is
+  // touched, and only near the right edge, so in normal running this does
+  // nothing at all: measured over thirty undisturbed seconds it had anything
+  // to act on in 7% of frames, never more than six cells out of eleven
+  // thousand.
+  float band = smoothstep(1.0 - outflowBand, 1.0, vUv.x);
+  if (velocity.x < 0.0) velocity.x *= 1.0 - band;
+
+  // The same ceiling the vorticity pass applies, repeated here because this is
+  // the field that gets advected next. Without it the projection can hand the
+  // advection something faster than the cap, which was how peaks of 490
+  // appeared against a limit of 320.
+  velocity = clamp(velocity, -speedCap, speedCap);
   fragColor = vec4(velocity, 0.0, 1.0);
 }`;
 
@@ -670,6 +709,8 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     }
 
     gradientSubtractProgram.bind();
+    gl!.uniform1f(gradientSubtractProgram.uniforms.speedCap!, SPEED_CAP);
+    gl!.uniform1f(gradientSubtractProgram.uniforms.outflowBand!, OUTFLOW_BAND);
     gl!.uniform2f(gradientSubtractProgram.uniforms.texelSize!, velocity.texelSizeX, velocity.texelSizeY);
     gl!.uniform1i(gradientSubtractProgram.uniforms.uPressure!, pressure.read.attach(0));
     gl!.uniform1i(gradientSubtractProgram.uniforms.uVelocity!, velocity.read.attach(1));
