@@ -79,7 +79,7 @@ function round5(v: number): number {
 /**
  * Rolling mean matching numpy's `np.convolve(arr, ones(window)/window, mode="same")`
  * exactly, including its true (zero-padded, not edge-replicated) boundary
- * behaviour — needed for byte-for-byte-equivalent hold/CoM detection.
+ * behaviour, needed for byte-for-byte-equivalent hold/CoM detection.
  */
 function rollingMean(arr: Float64Array, window: number): Float64Array {
   const N = arr.length;

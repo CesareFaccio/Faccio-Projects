@@ -7,10 +7,10 @@
 // it back. A crossing going upwards is an equilibrium it will fall off.
 //
 // It plots torque rather than drag because torque is the quantity that could be
-// measured honestly here — see BODY_FORCE_SHADER in tunnel.ts for the three
+// measured honestly here; see BODY_FORCE_SHADER in tunnel.ts for the three
 // attempts at drag and why each one failed its check against a disc.
 //
-// One series, so there is no legend — the window's title names it — and no
+// One series, so there is no legend (the window's title names it) and no
 // categorical palette to validate: the whole site is black on white by design,
 // and the density of the dot cloud carries weight in place of colour. Axes are
 // hairlines, ticks are three pixels, and the only things labelled directly are
@@ -105,7 +105,7 @@ export class Trace {
     ctx.textBaseline = "top";
 
     // Recessive hairlines, not a box and not a grid. The zero rule is dashed
-    // because it is a reference rather than data — and it is the line the whole
+    // because it is a reference rather than data, and it is the line the whole
     // plot is read against.
     const zeroY = Math.round(this.plotY(0, h));
     ctx.fillStyle = "#000";
@@ -161,7 +161,7 @@ export class Trace {
   status(settled: boolean): string {
     if (!this.current) return "no samples yet";
     const deg = Math.round(this.current.angle);
-    if (settled) return `${deg}° · holding — the torque crosses zero here`;
+    if (settled) return `${deg}° · holding, the torque crosses zero here`;
     return `${deg}° · ${this.current.torque > 0 ? "pushing ccw" : "pushing cw"}`;
   }
 }

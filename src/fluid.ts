@@ -9,7 +9,7 @@
 // The set-up is a channel: a steady inflow across the left edge, an open
 // outflow on the right, free-slip top and bottom, and a staggered row of small
 // cylinders just downstream of the inlet. The cylinders shed vortices which
-// break down across the rest of the frame — grid turbulence, the standard way
+// break down across the rest of the frame: grid turbulence, the standard way
 // a wind tunnel is made turbulent. Horizontal smoke rakes at the inlet make it
 // visible as streaklines, the way a real flow-visualisation rig does.
 //
@@ -20,12 +20,12 @@
 // Tuning: INLET_DYE_RATE sets how thick the smoke is; CURL and
 // VELOCITY_DISSIPATION together set how turbulent it looks (more curl, less
 // dissipation = higher effective Reynolds number); INLET_SPEED sets how fast
-// it crosses. Keep INLET_SPEED well under the CFL limit — advection backtraces
-// dt*velocity*texelSize per step, so a few hundred on a ~200-wide grid is
-// already a large fraction of a cell.
+// it crosses. Keep INLET_SPEED well under the CFL limit, since advection
+// backtraces dt*velocity*texelSize per step, so a few hundred on a ~200-wide
+// grid is already a large fraction of a cell.
 //
 // Everything is deliberately dependency-free and runs at a lower internal
-// resolution than the canvas — the dye field is what you see, and it is
+// resolution than the canvas: the dye field is what you see, and it is
 // upsampled by the GPU for free when drawn.
 
 export interface FluidHandle {
@@ -66,8 +66,8 @@ const CURL = 30; // vorticity confinement strength
 // field itself, at a few times the inflow speed.
 const CURL_CAP = 900;
 // Four times the inflow speed left enough headroom for a stirred region to
-// backtrace ~9 cells per advection step, which does not diverge — semi-
-// Lagrangian advection is unconditionally stable — but scrambles the field
+// backtrace ~9 cells per advection step, which does not diverge (semi-
+// Lagrangian advection is unconditionally stable) but scrambles the field
 // into noise, which is what "overwhelmed" looks like. At 2.5x the inflow the
 // cursor still visibly shoves the flow and the structure survives it.
 const SPEED_CAP = 320;
@@ -77,13 +77,13 @@ const SPLAT_RADIUS = 0.30;
 // Pointer forcing. SPLAT_FORCE converts cursor travel (in screen fractions)
 // into velocity; MAX_POINTER_IMPULSE is the hard cap on what one frame can
 // inject, which is what actually keeps a fast flick from destabilising the
-// channel. POINTER_DYE is deliberately small — the cursor is there to stir
+// channel. POINTER_DYE is deliberately small: the cursor is there to stir
 // the smoke that is already flowing, not to paint new smoke into the frame.
 const SPLAT_FORCE = 1400;
 const MAX_POINTER_IMPULSE = 170;
 // Cursor travel is measured against this many screen pixels, NOT against the
 // width of the canvas. Normalising by the canvas made the same flick hit
-// harder the smaller the canvas got — which is what destabilised the flow once
+// harder the smaller the canvas got, which is what destabilised the flow once
 // the hero stopped being full-bleed and became a window a little over half as
 // wide. A fixed reference means a given gesture pushes the fluid by the same
 // amount whatever size the window is.
@@ -106,8 +106,8 @@ const DISPLAY_GAIN = 1.5;
 // Sim steps run before the first paint, so the hero opens mid-turbulence.
 // One device pixel per CSS pixel. The display shader dithers against a 4x4
 // matrix in gl_FragCoord space, so this is what fixes that pattern at a
-// visible 4px grid instead of shrinking it to invisibility on a retina screen —
-// and the chunky output is the point, not a compromise. The dye field is
+// visible 4px grid instead of shrinking it to invisibility on a retina screen.
+// The chunky output is the point, not a compromise. The dye field is
 // upsampled to the canvas either way, so nothing is lost but fill rate.
 const DPR = 1;
 
@@ -186,7 +186,7 @@ void main () {
   if (vT.y > 1.0) { T = -C.y; }
   if (vB.y < 0.0) { B = -C.y; }
   // Left is a prescribed inflow, so the clamped sample is already the value we
-  // want. Right is an open outflow — zero gradient, so fluid can leave rather
+  // want. Right is an open outflow with zero gradient, so fluid can leave rather
   // than being reflected back and forcing the channel to recirculate.
   if (vR.x > 1.0) { R = C.x; }
   fragColor = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0);
@@ -231,7 +231,7 @@ void main () {
   vec2 velocity = texture(uVelocity, vUv).xy;
   velocity += force * dt;
   // Hard ceiling on speed. The previous 1000 was ~17 cells of travel per step
-  // at 60fps — far more headroom than any part of this flow needs, and enough
+  // at 60fps, far more headroom than any part of this flow needs, and enough
   // for a disturbance to persist long after it should have washed downstream.
   velocity = clamp(velocity, -speedCap, speedCap);
   fragColor = vec4(velocity, 0.0, 1.0);
@@ -315,7 +315,7 @@ void main () {
   }
 }`;
 
-// Zeroes whatever it is given inside the cylinders — applied to velocity (so
+// Zeroes whatever it is given inside the cylinders, applied to velocity (so
 // the flow has to go around them) and to dye (so they read as solid).
 const OBSTACLE_SHADER = `#version 300 es
 precision highp float; precision highp sampler2D;
@@ -344,7 +344,7 @@ out vec4 fragColor;
 ${OBSTACLE_GLSL}
 // The 4x4 ordered (Bayer) matrix a 1-bit Mac used to fake grey. Thresholding
 // the continuous density against it turns a smooth field into the crosshatched
-// patterns of a black-and-white QuickDraw screen — the simulation itself is
+// patterns of a black-and-white QuickDraw screen. The simulation itself is
 // untouched, this is purely how it is drawn.
 float bayer4 (vec2 pixel) {
   int x = int(mod(pixel.x, 4.0));
@@ -372,7 +372,7 @@ void main () {
   float v = 1.0 - exp(-uGain * max(d, 0.0));
   // Dye is drawn dark on white paper, so density raises ink coverage. The
   // density field sits in a narrow band around the middle, and a linear map of
-  // it dithers to near-uniform 50% noise with the flow structure buried in it —
+  // it dithers to near-uniform 50% noise with the flow structure buried in it,
   // so the band is stretched across the full range first. This is a contrast
   // expansion, not a threshold: it stays monotonic, so no value of the dye rate
   // makes the picture flip all at once the way the old smoothstep knee did.
@@ -385,7 +385,7 @@ void main () {
   ink = mix(ink, 1.0, solid);
 
   // Dither in device pixels, so the pattern stays a crisp 4px grid however the
-  // window is sized — scaling it with the simulation grid would make it crawl.
+  // window is sized; scaling it with the simulation grid would make it crawl.
   float lit = step(bayer4(gl_FragCoord.xy), ink);
   vec3 col = vec3(1.0 - lit);
   fragColor = vec4(col, 1.0);
@@ -396,7 +396,7 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    throw new Error(`fluid: shader compile failed — ${gl.getShaderInfoLog(shader)}`);
+    throw new Error(`fluid: shader compile failed: ${gl.getShaderInfoLog(shader)}`);
   }
   return shader;
 }
@@ -411,7 +411,7 @@ class Program {
     gl.attachShader(this.program, fragmentShader);
     gl.linkProgram(this.program);
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      throw new Error(`fluid: program link failed — ${gl.getProgramInfoLog(this.program)}`);
+      throw new Error(`fluid: program link failed: ${gl.getProgramInfoLog(this.program)}`);
     }
     const count = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS) as number;
     for (let i = 0; i < count; i++) {
@@ -427,7 +427,7 @@ class Program {
 /**
  * Boots the simulation onto `canvas`. Returns a handle whose destroy() releases
  * every GL resource and listener, or null when WebGL2 / float render targets
- * are unavailable — the caller's cue to leave its CSS fallback in place.
+ * are unavailable. That is the caller's cue to leave its CSS fallback in place.
  */
 export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   const gl = canvas.getContext("webgl2", {
@@ -560,7 +560,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
 
   // Phones get a coarser grid and fewer solver iterations. The dye field is
   // upsampled to the canvas either way, so at this size the difference is
-  // hard to see — but the saving in fill rate and battery is not.
+  // hard to see, but the saving in fill rate and battery is not.
   const compact = Math.min(window.innerWidth, window.innerHeight) < 760;
   const pressureIterations = compact ? 14 : PRESSURE_ITERATIONS;
   const simRes = getResolution(compact ? 96 : SIM_RESOLUTION);
@@ -652,7 +652,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
     gl!.uniform1i(divergenceProgram.uniforms.uVelocity!, velocity.read.attach(0));
     blit(divergence);
 
-    // Decay the previous frame's pressure rather than starting from zero —
+    // Decay the previous frame's pressure rather than starting from zero:
     // a warm start means far fewer Jacobi iterations are needed to converge.
     clearProgram.bind();
     gl!.uniform1i(clearProgram.uniforms.uTexture!, pressure.read.attach(0));
@@ -730,7 +730,7 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   // Pointer movement is accumulated here and applied once per frame, rather
   // than splatted per event. A fast drag fires many pointermove events between
   // frames, and splatting each one let a single flick inject an unbounded
-  // amount of momentum — the main cause of the runaway.
+  // amount of momentum, the main cause of the runaway.
   let pendingDX = 0;
   let pendingDY = 0;
   let pendingX = 0;
@@ -785,8 +785,8 @@ export function startFluid(canvas: HTMLCanvasElement): FluidHandle | null {
   // ── Emitters ─────────────────────────────────────────────────────────────
   // Each emitter rides a slow Lissajous loop, injecting continuously along its
   // own direction of travel. Because they never stop and never jump, the field
-  // is stirred smoothly rather than punched — no moment where a discrete puff
-  // appears — and the four of them together keep the whole frame in motion.
+  // is stirred smoothly rather than punched (no moment where a discrete puff
+  // appears) and the four of them together keep the whole frame in motion.
   // ── Sizing ───────────────────────────────────────────────────────────────
   function resize() {
     const dpr = DPR;

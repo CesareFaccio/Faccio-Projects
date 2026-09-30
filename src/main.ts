@@ -18,7 +18,7 @@ interface Project {
 // The project list. This is the only place the landing page needs editing to
 // add, rename or reorder a project.
 //
-// The entries below marked "planned" are PLACEHOLDERS — rename them, rewrite
+// The entries below marked "planned" are PLACEHOLDERS. Rename them, rewrite
 // their text, and set an href once each one exists. Delete any you don't want;
 // the wheel lays itself out around however many entries are here.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ const projects: Project[] = [
     mark: "Crux\nVision",
     blurb: "Climbing video analysis",
     detail:
-      "Upload a climbing video and see pose tracking, hold detection and biomechanical force analysis — computed entirely in your browser, with nothing uploaded anywhere.",
+      "Upload a climbing video and see pose tracking, hold detection and biomechanical force analysis, computed entirely in your browser, with nothing uploaded anywhere.",
     href: "crux-vision/",
     status: "in progress",
   },
@@ -45,7 +45,7 @@ const projects: Project[] = [
     name: "Project Three",
     mark: "Three",
     blurb: "Placeholder",
-    detail: "Placeholder card — replace this entry in src/main.ts with your next project.",
+    detail: "Placeholder card. Replace this entry in src/main.ts with your next project.",
     href: null,
     status: "planned",
   },
@@ -53,7 +53,7 @@ const projects: Project[] = [
     name: "Project Four",
     mark: "Four",
     blurb: "Placeholder",
-    detail: "Placeholder card — replace this entry in src/main.ts with your next project.",
+    detail: "Placeholder card. Replace this entry in src/main.ts with your next project.",
     href: null,
     status: "planned",
   },
@@ -61,7 +61,7 @@ const projects: Project[] = [
     name: "Project Five",
     mark: "Five",
     blurb: "Placeholder",
-    detail: "Placeholder card — replace this entry in src/main.ts with your next project.",
+    detail: "Placeholder card. Replace this entry in src/main.ts with your next project.",
     href: null,
     status: "planned",
   },
@@ -72,8 +72,8 @@ const heroCanvas = document.getElementById("fluid-canvas") as HTMLCanvasElement 
 const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Hiding the canvas uncovers the message underneath it, so the two reasons the
-// simulation might not run need to say which one it was — "no WebGL2" is a lie
-// when the visitor simply asked for less motion.
+// simulation might not run need to say which one it was, because "no WebGL2"
+// is a lie when the visitor simply asked for less motion.
 const heroFallback = document.querySelector<HTMLElement>(".win__fallback");
 
 if (heroCanvas && !prefersReducedMotion) {

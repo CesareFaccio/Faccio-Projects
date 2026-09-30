@@ -56,7 +56,7 @@ let videoHeight = 0;
 let activeVideoEl: HTMLVideoElement | null = null;
 let playbackRafId: number | null = null;
 let manualPlaybackStartMs: number | null = null; // set only when the fallback (below) is active
-let isBusy = false; // extracting or recording — ignore new drops meanwhile
+let isBusy = false; // extracting or recording, so ignore new drops meanwhile
 
 function setStatus(text: string) {
   statusEl.textContent = text;
@@ -162,12 +162,12 @@ function frameAtTime(t: number): FrameEntry | null {
   return currentPoseData.landmarks[idx] ?? null;
 }
 
-/** Draws the climbing_plus.mp4-equivalent dual-panel overlay (left: weight/motion schematic, right: skeleton + forces + CoM + holds) — assumes the video frame itself is already drawn into the canvas's right half. */
+/** Draws the climbing_plus.mp4-equivalent dual-panel overlay (left: weight/motion schematic, right: skeleton + forces + CoM + holds). Assumes the video frame itself is already drawn into the canvas's right half. */
 function drawOverlayForFrame(entry: FrameEntry | null) {
   renderPlusOverlay(ctx, entry, currentAnalysis, currentWeightByFrame, currentMotionByFrame, videoWidth, videoHeight);
 }
 
-/** Draws the video's current frame (into the right half only — the left half is the synthetic schematic) plus the overlay onto the canvas. */
+/** Draws the video's current frame (into the right half only, since the left half is the synthetic schematic) plus the overlay onto the canvas. */
 function drawCurrentFrame() {
   if (!activeVideoEl) return;
   ctx.drawImage(activeVideoEl, videoWidth, 0, videoWidth, videoHeight);
@@ -182,7 +182,7 @@ function loopTick() {
 /**
  * Fallback used when native playback isn't allowed (some browsers, notably
  * Safari, reject video.play() unless it happens right after a real user
- * gesture — true for the auto-loaded demo, which runs on page load with no
+ * gesture; true for the auto-loaded demo, which runs on page load with no
  * gesture at all). Drives the loop by manually scrubbing currentTime against
  * wall-clock time instead of relying on the browser to advance playback.
  */
@@ -230,7 +230,7 @@ function stopLoopPlayback() {
 async function handleFile(file: File) {
   if (isBusy) return;
   isBusy = true;
-  // The visitor has brought their own climb — retire the pre-rendered example
+  // The visitor has brought their own climb, so retire the pre-rendered example
   // so only one analysis is on screen, and so its decoding stops competing
   // with the extraction that is about to run.
   hideDemo();
@@ -306,7 +306,7 @@ async function handleFile(file: File) {
     analysisSettingsEl.hidden = false;
     progressBar.style.width = "100%";
     setStatus(
-      `Processed ${data.landmarks.length} frames in ${elapsed}s — ` +
+      `Processed ${data.landmarks.length} frames in ${elapsed}s, ` +
         `${detectionRate}% detection rate (${data.video.width}x${data.video.height} @ ${data.video.fps.toFixed(2)}fps)`
     );
 
@@ -314,7 +314,7 @@ async function handleFile(file: File) {
   } catch (err) {
     if (err instanceof UnsupportedVideoError) {
       showError(err.message);
-      setStatus("Couldn't process this video — see the note above.");
+      setStatus("Couldn't process this video. See the note above.");
     } else {
       setStatus(`Something went wrong: ${(err as Error).message}`);
       console.error(err);
@@ -330,8 +330,8 @@ async function handleFile(file: File) {
  *
  * None of the physics depends on it: holds, percentages, centre of mass and
  * joint angles all come out of a solve done in fractions of body weight. So
- * this re-runs the force distribution alone — milliseconds over the frames
- * already extracted — rather than the whole pipeline, and pose extraction (the
+ * this re-runs the force distribution alone, milliseconds over the frames
+ * already extracted, rather than the whole pipeline, and pose extraction (the
  * part that costs a minute) is never touched.
  */
 function applyBodyWeight() {
@@ -432,7 +432,7 @@ async function downloadOverlayVideo() {
     }
 
     // MP4/H.264 first, because that is what actually opens in QuickTime,
-    // iMovie, Premiere and a phone's camera roll — a WebM download is a file
+    // iMovie, Premiere and a phone's camera roll; a WebM download is a file
     // most people can't do anything with. Chrome and Safari can record MP4
     // directly; Firefox can't, so WebM stays as the fallback rather than the
     // default. isTypeSupported() decides at runtime, so a browser gaining or
@@ -449,7 +449,7 @@ async function downloadOverlayVideo() {
     const extension = mimeType.startsWith("video/mp4") ? "mp4" : "webm";
 
     // captureStream()+MediaRecorder occasionally produces a near-empty
-    // recording under load — a real timing race in the browser's capture
+    // recording under load, a real timing race in the browser's capture
     // pipeline, not something this code can prevent outright. A
     // few-hundred-byte file is just a container header with no frames, so
     // rather than risk silently handing over a corrupt download, validate
@@ -461,7 +461,7 @@ async function downloadOverlayVideo() {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       if (attempt > 1) {
-        setStatus(`Recording came out empty — retrying (attempt ${attempt}/${MAX_ATTEMPTS})…`);
+        setStatus(`Recording came out empty, retrying (attempt ${attempt}/${MAX_ATTEMPTS})…`);
       }
       try {
         const candidate = await recordOverlayVideoOnce(mimeType);
@@ -476,7 +476,7 @@ async function downloadOverlayVideo() {
     }
 
     if (!blob) {
-      setStatus("Couldn't record the overlay video after a few tries — please try again.");
+      setStatus("Couldn't record the overlay video after a few tries. Please try again.");
       console.error("downloadOverlayVideo: all attempts failed", lastError);
       return;
     }
@@ -527,7 +527,7 @@ function hideDemo() {
 }
 
 /**
- * Starts the pre-rendered example. This is just a <video> tag — none of the
+ * Starts the pre-rendered example. This is just a <video> tag, and none of the
  * analysis pipeline is involved, which is the whole point: the finished
  * output is on screen in the time it takes to fetch ~1.5MB, rather than
  * after a 43MB model download and a few thousand frames of inference.

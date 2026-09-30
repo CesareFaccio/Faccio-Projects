@@ -16,11 +16,11 @@ import type { AnalysisResult, Hold } from "./analysis";
  * percentages, the force distribution across holds, the limb geometry and the
  * joint angles are all independent of it; it converts those fractions into
  * kilograms and does nothing else. That is why changing it costs a re-scale
- * rather than a re-analysis — no holds are re-detected and nothing is re-solved.
+ * rather than a re-analysis: no holds are re-detected and nothing is re-solved.
  */
 export const DEFAULT_BODY_WEIGHT_KG = 70.0;
 /**
- * The range the input accepts. Not a judgement about who climbs — it is where
+ * The range the input accepts. Not a judgement about who climbs. It is where
  * the kilogram readouts stay meaningful, and a guard against a stray keystroke
  * turning every label into a five-digit number.
  */

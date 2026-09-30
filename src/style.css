@@ -3,12 +3,12 @@
 
    The whole page is one black-and-white desktop: 1px black outlines, pinstriped
    title bars, hard drop shadows, and no colour anywhere. "Highlighted" means
-   inverted — black fill, white text — exactly as it did in 1991, which is why
+   inverted, black fill and white text, exactly as it did in 1991, which is why
    there is no accent hue in the token list below.
 
    Two typefaces stand in for the originals: Pixelify Sans for chrome and
-   headings (where System 7 used Chicago) and Geneva — still installed on every
-   Mac, with Verdana/Tahoma behind it elsewhere — for running text.
+   headings (where System 7 used Chicago) and Geneva (still installed on every
+   Mac, with Verdana/Tahoma behind it elsewhere) for running text.
    ───────────────────────────────────────────────────────────────────────── */
 
 @font-face {
@@ -64,7 +64,7 @@ body {
 
 a { color: inherit; }
 
-/* Pixel type wants no smoothing — the point is visible square pixels. */
+/* Pixel type wants no smoothing: the point is visible square pixels. */
 .menubar,
 .win__bar,
 .win__toolbar,
@@ -277,13 +277,9 @@ a.menubar__item:hover { background: var(--ink); color: var(--paper); }
   font-size: 12px;
   color: var(--dim);
 }
-.quote__note {
-  margin: 20px 0 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--ink);
-  font-size: 12.5px;
-  line-height: 1.65;
-}
+/* With the note gone, the button takes over its spacing: the quote should not
+   sit flush against a control. */
+.win--quote .btn { margin-top: 26px; }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 .btn {
@@ -327,7 +323,7 @@ a.menubar__item:hover { background: var(--ink); color: var(--paper); }
   background-image: repeating-conic-gradient(#e2e2e2 0% 25%, #f2f2f2 0% 50%);
   background-size: 4px 4px;
   /* The arc handles horizontal movement itself via pointer events, so the
-     browser is told to own vertical panning only — otherwise a drag across
+     browser is told to own vertical panning only, because otherwise a drag across
      the wheel scrolls the page instead of turning it. */
   touch-action: pan-y;
 }
@@ -339,7 +335,7 @@ a.menubar__item:hover { background: var(--ink); color: var(--paper); }
   left: 50%;
   top: 40px;
   width: 0;
-  /* Height is set in JS — it equals the circle's radius, so the ring's BOTTOM
+  /* Height is set in JS: it equals the circle's radius, so the ring's BOTTOM
      edge sits at the centre of rotation. Rotating about that point is the
      entire mechanism: it sweeps each slot along the rim. Without this origin
      the ring pivots about its own middle, half a radius too high, and the
@@ -459,8 +455,8 @@ a.card { cursor: pointer; }
 .card--live .card__status { background: var(--ink); color: var(--paper); }
 
 /* A planned card is drawn in the greyed-out state the Finder used for things
-   you cannot open: the outline stays crisp — it is still a real object on the
-   desktop — and only the type and the title-bar stripes go pale. */
+   you cannot open: the outline stays crisp (it is still a real object on the
+   desktop) and only the type and the title-bar stripes go pale. */
 .card--planned .card__bar {
   background: repeating-linear-gradient(to bottom, #a4a4a4 0 1px, var(--paper) 1px 2px);
 }

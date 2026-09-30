@@ -4,12 +4,12 @@
 //
 // A copy of ../../src/windows.ts. The two apps are separate Vite builds with
 // separate roots, so they duplicate their shared front-end the same way their
-// stylesheets do — a change here wants the same change there.
+// stylesheets do, so a change here wants the same change there.
 //
 // Two rules keep this from fighting the rest of the page:
 //
 //  1. It moves windows with `transform`, never by changing their layout
-//     position. The page is still an ordinary document flow — the projects
+//     position. The page is still an ordinary document flow: the projects
 //     window is what the "Projects" link scrolls to, and the hero grid still
 //     decides how big everything is. Dragging only paints it somewhere else.
 //

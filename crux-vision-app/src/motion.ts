@@ -6,9 +6,10 @@
 // Note on "smoothing" here: this is standard numerical-differentiation
 // practice (smoothing a position signal before taking its 2nd derivative,
 // which otherwise amplifies detection noise enormously), applied to the
-// already-computed CoM trajectory — a different thing from, and unrelated
-// to, temporally smoothing raw pose landmarks (which was explicitly ruled
-// out earlier as a way to paper over MediaPipe's per-frame detection error).
+// already-computed CoM trajectory. That is a different thing from, and
+// unrelated to, temporally smoothing raw pose landmarks (which was explicitly
+// ruled out earlier as a way to paper over MediaPipe's per-frame detection
+// error).
 // This is ported as-is because it's what the reference climbing_plus.mp4
 // output actually shows.
 

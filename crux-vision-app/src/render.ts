@@ -1,6 +1,6 @@
 // render.ts
-// Canvas port of reconstruct_video.py's draw_pose / draw_holds / draw_com —
-// reproduces the Python-generated pose_overlay.mp4's visual style (per-region
+// Canvas port of reconstruct_video.py's draw_pose / draw_holds / draw_com.
+// Reproduces the Python-generated pose_overlay.mp4's visual style (per-region
 // skeleton colouring, black-outlined dots, hold markers with past/active
 // states, the CoM diamond, and the frame/timestamp stamp) in the browser, so
 // the live preview and the exported overlay video match the original tool's
@@ -21,10 +21,10 @@ const FOOT_INDICES = new Set([27, 28, 29, 30, 31, 32]);
 const FACE_INDICES = new Set(Array.from({ length: 11 }, (_, i) => i));
 
 // Colours converted from reconstruct_video.py's OpenCV BGR tuples to RGB hex.
-const COLOUR_BODY = "#64dc00"; // green — torso & limbs
-const COLOUR_FACE = "#c8c8c8"; // grey — face landmarks
-const COLOUR_HANDS = "#ffa000"; // orange — wrists/hands
-const COLOUR_FEET = "#5050ff"; // blue — ankles/feet
+const COLOUR_BODY = "#64dc00"; // green: torso & limbs
+const COLOUR_FACE = "#c8c8c8"; // grey: face landmarks
+const COLOUR_HANDS = "#ffa000"; // orange: wrists/hands
+const COLOUR_FEET = "#5050ff"; // blue: ankles/feet
 const COLOUR_SKELETON = "#50c800"; // connection line colour
 
 function landmarkColour(idx: number): string {
@@ -92,7 +92,7 @@ export function drawPose(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
 function drawHolds(ctx: CanvasRenderingContext2D, frameIdx: number, analysis: AnalysisResult) {
   const allHolds: Hold[] = [...analysis.handholds, ...analysis.footholds];
 
-  // Past holds first — drawn underneath any active hold at the same spot.
+  // Past holds first, drawn underneath any active hold at the same spot.
   for (const hold of allHolds) {
     if (frameIdx <= hold.end_frame) continue;
     const colour = HOLD_COLOURS[holdKey(hold.kind, hold.side)];
@@ -105,7 +105,7 @@ function drawHolds(ctx: CanvasRenderingContext2D, frameIdx: number, analysis: An
     ctx.stroke();
   }
 
-  // Active holds — prominent ring + filled circle + label.
+  // Active holds: prominent ring + filled circle + label.
   for (const hold of allHolds) {
     if (frameIdx < hold.start_frame || frameIdx > hold.end_frame) continue;
     const colour = HOLD_COLOURS[holdKey(hold.kind, hold.side)];
@@ -175,8 +175,8 @@ function drawFrameStamp(ctx: CanvasRenderingContext2D, entry: FrameEntry) {
 
 /**
  * Draws the full pose_overlay.mp4-equivalent overlay for one frame: holds
- * (underneath), skeleton, CoM (on top of skeleton), then the frame stamp —
- * same layering order as reconstruct_video.py's reconstruct().
+ * (underneath), skeleton, CoM (on top of skeleton), then the frame stamp.
+ * The same layering order as reconstruct_video.py's reconstruct().
  */
 export function renderOverlay(
   ctx: CanvasRenderingContext2D,

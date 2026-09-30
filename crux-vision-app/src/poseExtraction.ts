@@ -1,6 +1,6 @@
 // Type-only: the MediaPipe runtime is loaded with a dynamic import() inside
 // extractPose(), so it stays out of the initial page bundle entirely. The
-// landing view is a pre-rendered demo video and needs none of this code —
+// landing view is a pre-rendered demo video and needs none of this code, so
 // it is fetched the first time someone actually analyses a video.
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { FrameEntry, PoseData } from "./types";
@@ -24,19 +24,19 @@ export interface ExtractionResult {
   videoElement: HTMLVideoElement;
 }
 
-// Self-hosted (see public/wasm, public/models) rather than CDN — keeps the
-// live site working without depending on a third party's CDN uptime.
+// Self-hosted (see public/wasm, public/models) rather than CDN, which keeps
+// the live site working without depending on a third party's CDN uptime.
 // BASE_URL is resolved relative to wherever this page actually gets
 // deployed (e.g. /crux-vision/ under a GitHub Pages project subpath), so
 // these must not be hardcoded as absolute root paths.
 const WASM_BASE = `${import.meta.env.BASE_URL}wasm`;
 const MODEL_PATH = `${import.meta.env.BASE_URL}models/pose_landmarker_full.task`;
 
-// Shown up front (index.html) and reused in the error message below —
+// Shown up front (index.html) and reused in the error message below,
 // kept in one place so the two stay consistent.
 export const REQUIRED_FORMAT_NOTE =
   'Works with H.264-encoded video (MP4/MOV). If this was recorded on an iPhone, check ' +
-  'Settings > Camera > Formats is set to "Most Compatible", not "High Efficiency" — HEVC video ' +
+  'Settings > Camera > Formats is set to "Most Compatible", not "High Efficiency". HEVC video ' +
   "can't be played by most browsers.";
 
 type VisionModule = typeof import("@mediapipe/tasks-vision");
@@ -51,7 +51,7 @@ async function createLandmarker(mp: VisionModule, vision: VisionFileset): Promis
     minPosePresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
   });
-  // GPU delegate isn't available on every device/browser — fall back to CPU.
+  // GPU delegate isn't available on every device/browser, so fall back to CPU.
   return mp.PoseLandmarker.createFromOptions(vision, config("GPU")).catch(() =>
     mp.PoseLandmarker.createFromOptions(vision, config("CPU"))
   );
@@ -60,7 +60,7 @@ async function createLandmarker(mp: VisionModule, vision: VisionFileset): Promis
 /**
  * Loads a video File into a hidden <video> element and waits for it to be
  * ready to play. Rejects with UnsupportedVideoError if the browser can't
- * decode it — most commonly an HEVC (iPhone "High Efficiency") video, which
+ * decode it, most commonly an HEVC (iPhone "High Efficiency") video, which
  * most non-Safari browsers can't play at all.
  */
 function loadVideo(file: File): Promise<HTMLVideoElement> {
@@ -145,7 +145,7 @@ function seekTo(video: HTMLVideoElement, t: number): Promise<void> {
     const onSeeked = () => finish();
     video.addEventListener("seeked", onSeeked);
     // Safety net: some seeks (e.g. to a time within the currently displayed
-    // frame) never fire 'seeked' — don't stall the extraction loop forever.
+    // frame) never fire 'seeked', so don't stall the extraction loop forever.
     const timer = setTimeout(finish, 1500);
     video.currentTime = t;
   });
@@ -175,7 +175,7 @@ export async function extractPose(
 ): Promise<ExtractionResult> {
   onProgress?.({ phase: "loading-model" });
   // First call pulls in the MediaPipe runtime, then its WASM and the ~9MB
-  // model — all of it deferred until someone actually analyses a video.
+  // model, all of it deferred until someone actually analyses a video.
   const mp = await import("@mediapipe/tasks-vision");
   const vision = await mp.FilesetResolver.forVisionTasks(WASM_BASE);
   const landmarker = await createLandmarker(mp, vision);

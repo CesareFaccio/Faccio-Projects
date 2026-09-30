@@ -1,11 +1,11 @@
 // plusRender.ts
 // Canvas port of reconstruct_plus.py: a side-by-side analysis view.
-//   LEFT panel  — a synthetic body schematic (dark background) with hand/foot
+//   LEFT panel:   a synthetic body schematic (dark background) with hand/foot
 //                 weight circles colour-coded green→red by vertical load,
 //                 limb segments colour-coded by axial force, and (when CoM
 //                 motion data is available) velocity/acceleration gauges +
 //                 a velocity direction arrow.
-//   RIGHT panel — the real video frame with the skeleton, force-coloured
+//   RIGHT panel:  the real video frame with the skeleton, force-coloured
 //                 limb segments, knee/elbow joint-angle dots, CoM, and small
 //                 weight circles at the active hold positions.
 //
@@ -14,7 +14,7 @@
 //
 // Font glyphs and the velocity arrowhead are a close visual match to cv2's
 // Hershey-font + arrowedLine rendering, not pixel-identical (no browser
-// equivalent for either) — same caveat as render.ts.
+// equivalent for either), same caveat as render.ts.
 
 import { LANDMARK_NAMES } from "./types";
 import type { FrameEntry } from "./types";
@@ -555,7 +555,7 @@ function drawWeightSchematic(
 /**
  * Draws the full climbing_plus.mp4-equivalent dual-panel overlay for one
  * frame. Assumes the caller has already drawn the video frame itself into
- * the RIGHT half of the canvas (x: videoWidth..2*videoWidth) — the left
+ * the RIGHT half of the canvas (x: videoWidth..2*videoWidth). The left
  * half is entirely synthetic (the weight/motion schematic) and this
  * function fills it from scratch.
  */

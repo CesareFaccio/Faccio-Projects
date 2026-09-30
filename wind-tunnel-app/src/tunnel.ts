@@ -2,8 +2,8 @@
 // A vertical wind tunnel with a body immersed in it, free to rotate about its
 // own centre and nothing else.
 //
-// The flow is the same family of solver as the landing page's hero — semi-
-// Lagrangian advection, vorticity confinement, a Jacobi pressure projection —
+// The flow is the same family of solver as the landing page's hero (semi-
+// Lagrangian advection, vorticity confinement, a Jacobi pressure projection)
 // turned on its side so the air runs bottom to top, with the fixed cylinders
 // replaced by one body whose shape someone drew.
 //
@@ -29,8 +29,8 @@
 //     f_body  = -f_fluid
 //
 // so the torque about the pivot is sum(r x f_body) over the grid. That sum is
-// done on the GPU — a force texture, then four box-sum passes down to a single
-// texel — and only that one texel is read back per frame. Reading the whole
+// done on the GPU (a force texture, then four box-sum passes down to a single
+// texel) and only that one texel is read back per frame. Reading the whole
 // field back every frame would cost more than the simulation.
 //
 // ── Units ───────────────────────────────────────────────────────────────────
@@ -42,20 +42,20 @@
 // Velocity is in the solver's own units, where advection moves a parcel by
 // dt * u * texelSize per step; physical speed in tunnel units is u / gridHeight.
 // Torque and inertia inherit that scale. None of it is SI, and there is no
-// pretence that it is — the sliders are calibrated so that the behaviour is
+// pretence that it is: the sliders are calibrated so that the behaviour is
 // right, not so that the numbers are.
 
 import type { Shape } from "./shape";
 
 export interface TunnelParams {
-  /** 0..1 — how hard the air blows. */
+  /** 0..1: how hard the air blows. */
   wind: number;
-  /** 0..1 — resistance to rotation, over and above what the fluid provides. */
+  /** 0..1: resistance to rotation, over and above what the fluid provides. */
   damping: number;
-  /** 0..1 — multiplier on the shape's own moment of area. */
+  /** 0..1: multiplier on the shape's own moment of area. */
   inertia: number;
   /**
-   * 0..1 — inverse viscosity, and so the Reynolds number.
+   * 0..1: inverse viscosity, and so the Reynolds number.
    *
    * At 0 the air is thick: the boundary layer stays attached, the wake closes
    * quietly behind the body and it settles quickly. Toward 1 the air thins, the
@@ -69,14 +69,14 @@ export interface TunnelParams {
    */
   turbulence: number;
   /**
-   * -1..1 — where the body is pinned, along its own long axis, as a fraction of
+   * -1..1: where the body is pinned, along its own long axis, as a fraction of
    * its radius. 0 pins it at the area centroid.
    *
    * This slider is the whole reason the thing behaves the way people expect.
    * A body pinned at its centroid does NOT seek the low-drag orientation: at a
    * small angle of attack the centre of pressure sits ahead of mid-chord, so
    * the moment pushes the angle wider, and the stable resting place is
-   * broadside — maximum drag. It is exactly why a dropped card settles flat
+   * broadside, at maximum drag. It is exactly why a dropped card settles flat
    * rather than edge-on. Weathervanes, darts and shuttlecocks self-orient
    * because they are held AHEAD of their centre of pressure, and moving the
    * balance point forward here is the same trick.
@@ -91,7 +91,7 @@ export interface TunnelReadout {
   omega: number;
   /** Torque about the pivot, smoothed. Arbitrary but consistent units; the
    *  sign and the zero crossings are what mean anything. There is deliberately
-   *  no drag here — see BODY_FORCE_SHADER for why it could not be measured
+   *  no drag here; see BODY_FORCE_SHADER for why it could not be measured
    *  honestly. */
   torque: number;
   /** True once the body has been turning slowly for a while. */
@@ -134,7 +134,7 @@ const REFERENCE_GRID = 180;
  * Candidate grid heights, coarsest first.
  *
  * Resolution is the one thing that buys visible turbulence, because the
- * advection scheme's own diffusion falls with cell size — so a finer grid
+ * advection scheme's own diffusion falls with cell size, so a finer grid
  * genuinely raises the Reynolds number the tunnel can reach, where asking the
  * slider for less viscosity only saturates against it.
  *
@@ -182,8 +182,8 @@ const PRESSURE_DISSIPATION = 0.3;
 const PRESSURE_ITERATIONS = 40;
 
 const CURL_CAP = 900;
-// A safety net, and — since the turbulence slider became a viscosity rather
-// than a vorticity-confinement strength — no longer a working part. Measured
+// A safety net, and, since the turbulence slider became a viscosity rather
+// than a vorticity-confinement strength, no longer a working part. Measured
 // with this lifted to 420 so the physics had to hold unaided, the peak stays at
 // 1.9 to 2.0 cells of travel per advection step across the whole slider. It
 // used to reach 6.5, and the clamp was the only thing standing in the way.
@@ -203,8 +203,8 @@ const WARMUP_STEPS = 80;
 const DT = 1 / 60;
 
 // ── Units ───────────────────────────────────────────────────────────────────
-// Everything below is in TUNNEL units — tunnel heights per second, tunnel
-// heights squared per second — and is converted to the solver's cell units at
+// Everything below is in TUNNEL units (tunnel heights per second, tunnel
+// heights squared per second) and is converted to the solver's cell units at
 // the point of use, by multiplying by the grid height (velocity) or its square
 // (viscosity). That indirection is what lets the grid change with the device
 // without changing the physics: a wind of 0.7 means the same flow whether it is
@@ -212,14 +212,14 @@ const DT = 1 / 60;
 //
 // The ceiling on wind is set by the advection step, not by taste. Past roughly
 // two cells of travel per step the scheme stops resolving the flow and starts
-// smearing it, and the pressure field goes with it — measured drag on a disc
+// smearing it, and the pressure field goes with it: measured drag on a disc
 // came out NEGATIVE at a higher ceiling, and steady and positive at this one.
 const WIND_MIN = 45 / REFERENCE_GRID;
 const WIND_MAX = 128 / REFERENCE_GRID;
 // Vorticity confinement, off.
 //
 // It went from being the turbulence slider, to a small fixed corrective, to
-// nothing — and the reason it is nothing is that MacCormack advection does the
+// nothing, and the reason it is nothing is that MacCormack advection does the
 // job it was standing in for, honestly. Confinement existed to claw back detail
 // the first-order scheme smeared away, and it did that by adding energy in
 // proportion to the vorticity already present: a positive feedback with no
@@ -245,7 +245,7 @@ const VISCOSITY_ITERATIONS = 16;
  * simulate an inviscid fluid on a finite grid: with nothing to dissipate at the
  * small scales, a bluff-body wake keeps rolling vorticity up into structures
  * finer than the cells, and the local velocity climbs until it hits the speed
- * clamp. That is what an intermittent "uncontrolled build-up" looks like — the
+ * clamp. That is what an intermittent "uncontrolled build-up" looks like: the
  * spikes measured at the top of the slider were 3.2 to 3.3 cells of travel per
  * step against a clamp at 3.17, i.e. the flow pressed against the ceiling and
  * was being truncated.
@@ -253,7 +253,7 @@ const VISCOSITY_ITERATIONS = 16;
  * So the floor is stated as a resolution condition rather than a number: the
  * viscosity is never allowed below wind / CELL_REYNOLDS_MAX, which is exactly
  * the statement that a cell must be able to resolve what it is being asked to
- * carry. Being grid- and wind-aware is the point — a finer grid carries more
+ * carry. Being grid- and wind-aware is the point: a finer grid carries more
  * cells per unit length, so the same condition permits a lower PHYSICAL
  * viscosity and a higher Reynolds number, which is how the device tiers buy
  * turbulence rather than just pixels.
@@ -272,7 +272,7 @@ const VISCOSITY_MIN = 0.4 / (REFERENCE_GRID * REFERENCE_GRID);
  * The advection scheme's own diffusion, as a coefficient rather than a number:
  * it is proportional to the flow speed and to the cell size, so on a finer grid
  * it genuinely falls. That is the whole reason resolution buys turbulence.
- * Calibrated at the reference grid, and indicative rather than measured — the
+ * Calibrated at the reference grid, and indicative rather than measured, so the
  * Reynolds number shown to the viewer inherits that.
  */
 const NUMERICAL_VISCOSITY_COEFF = 0.162;
@@ -281,7 +281,7 @@ const NUMERICAL_VISCOSITY_COEFF = 0.162;
 // is the only reason the body moves at all: swept through angle with its
 // rotation frozen, a plate at mid wind feels torques of roughly 0.1 to 1.6, and
 // its second moment about the pivot is about 2.4e-4. The first guess at
-// INERTIA_SCALE was 5.2e4 — some sixty times too stiff — so the body sat
+// INERTIA_SCALE was 5.2e4, some sixty times too stiff, so the body sat
 // motionless while the torque quietly did nothing.
 //
 // INERTIA_SCALE is set so the angular acceleration at a typical torque swings a
@@ -378,8 +378,8 @@ void main () { fragColor = value * texture(uTexture, vUv); }`;
  * `texelSize` here is the VELOCITY grid's, never the target's, and that
  * distinction was a real bug. Velocity is carried in cells per second of the
  * simulation grid, so the distance a parcel travels is dt * u / simGridHeight
- * whatever field is being carried. Passing the dye grid's texel size instead —
- * 420 cells against the simulation's 180 — advected the smoke at 43% of the
+ * whatever field is being carried. Passing the dye grid's texel size instead,
+ * 420 cells against the simulation's 180, advected the smoke at 43% of the
  * speed of the fluid it was supposed to be tracing.
  */
 const ADVECTION_SHADER = `#version 300 es
@@ -403,7 +403,7 @@ void main () {
  *
  * Plain semi-Lagrangian advection is first-order: every step it interpolates
  * between grid values, and that interpolation is a low-pass filter. Applied
- * sixty times a second it behaves exactly like a viscosity — one nobody asked
+ * sixty times a second it behaves exactly like a viscosity, one nobody asked
  * for, which on a 180-cell grid was large enough to swamp any viscosity the
  * slider set and hold the whole tunnel in the laminar regime.
  *
@@ -487,7 +487,7 @@ void main () {
  *     (I - nu * dt * laplacian) u_new = u_old
  *
  * This is the term the "turbulence" slider actually moves, and it is the only
- * honest place to put it. What was there before — vorticity confinement — is
+ * honest place to put it. What was there before, vorticity confinement, is
  * not a physical effect at all: it is a numerical corrector that pushes
  * vorticity back toward local maxima to undo the smearing of a coarse advection
  * scheme. Turning it up does not make a flow more turbulent, it injects energy
@@ -499,7 +499,7 @@ void main () {
  * sheds vortices alternately off each side.
  *
  * The solve is implicit because explicit diffusion needs nu*dt/dx^2 <= 1/4,
- * which at this timestep caps nu at about 15 — well below the laminar end of
+ * which at this timestep caps nu at about 15, well below the laminar end of
  * the range. Velocities here are already in cells per second and the grid
  * spacing is one cell, so nu is in cells squared per second and no unit
  * conversion is needed.
@@ -536,7 +536,7 @@ void main () {
   if (vL.x < 0.0) { L = -C.x; }
   if (vR.x > 1.0) { R = -C.x; }
   // The bottom is a prescribed inflow, so the clamped sample is already the
-  // value we want. The top is an open outflow — zero gradient, so air leaves
+  // value we want. The top is an open outflow with zero gradient, so air leaves
   // instead of being reflected back down into the tunnel.
   if (vT.y > 1.0) { T = C.y; }
   fragColor = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0);
@@ -614,8 +614,8 @@ void main () {
   float B = texture(uPressure, vB).x;
   vec2 velocity = texture(uVelocity, vUv).xy - vec2(R - L, T - B);
   // The same ceiling as the vorticity pass, applied again here. Without it the
-  // projection could hand the advection a field faster than the clamp allows —
-  // measured at 4.3 cells per step against a ceiling meant to be 3.2 — and it
+  // projection could hand the advection a field faster than the clamp allows,
+  // measured at 4.3 cells per step against a ceiling meant to be 3.2, and it
   // is the field coming OUT of the projection that gets advected.
   fragColor = vec4(clamp(velocity, -speedCap, speedCap), 0.0, 1.0);
 }`;
@@ -640,8 +640,8 @@ void main () {
 /**
  * The torque the fluid puts on the body, per cell.
  *
- * The obvious measurement — the momentum the forcing step takes out of the
- * fluid — is nearly useless at steady state, and it is worth saying why. Once
+ * The obvious measurement (the momentum the forcing step takes out of the
+ * fluid) is nearly useless at steady state, and it is worth saying why. Once
  * the flow has settled, the velocity inside the body has ALREADY been driven to
  * zero on previous steps, so each new step removes only the little that
  * advected in since: the number tends to zero while the real force does not.
@@ -660,14 +660,14 @@ void main () {
  *
  * Only the MOMENT of that force is used, never the force itself, and the
  * distinction is not fussiness. A large-scale pressure gradient across the
- * tunnel adds -grad(p) * V to the force — measured on a disc it swamped the
- * real signal and flipped its sign — but it adds no moment about the centroid,
+ * tunnel adds -grad(p) * V to the force; measured on a disc it swamped the
+ * real signal and flipped its sign. But it adds no moment about the centroid,
  * because the resultant of a uniform body force acts at the centroid itself.
  * Torque is immune to it; drag was not, and three attempts at correcting drag
  * (the raw integral, a background-gradient subtraction, and a downstream wake
  * rake) all failed validation on a disc, whose drag must be positive, steady
- * and independent of angle. Torque passed the matching test — a disc's must be
- * zero at every angle — with a standard deviation of 0.003 against plate
+ * and independent of angle. Torque passed the matching test (a disc's must be
+ * zero at every angle) with a standard deviation of 0.003 against plate
  * torques of 0.1 to 1.6, so torque is what this reports.
  */
 const BODY_FORCE_SHADER = `#version 300 es
@@ -697,7 +697,7 @@ void main () {
 
   // Green carries the local speed, which the reduction maxes rather than sums.
   // The advection step moves a parcel dt*u cells, so this number divided by 60
-  // is how many cells the fastest part of the flow jumps per step — the single
+  // is how many cells the fastest part of the flow jumps per step, the single
   // most useful thing to know about whether the solver is still resolving
   // anything or just smearing.
   float speed = length(texture(uVelocity, vUv).xy);
@@ -821,7 +821,7 @@ function compileShader(gl: WebGL2RenderingContext, type: number, source: string)
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    throw new Error(`tunnel: shader compile failed — ${gl.getShaderInfoLog(shader)}`);
+    throw new Error(`tunnel: shader compile failed: ${gl.getShaderInfoLog(shader)}`);
   }
   return shader;
 }
@@ -836,7 +836,7 @@ class Program {
     gl.attachShader(this.program, fragmentShader);
     gl.linkProgram(this.program);
     if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-      throw new Error(`tunnel: program link failed — ${gl.getProgramInfoLog(this.program)}`);
+      throw new Error(`tunnel: program link failed: ${gl.getProgramInfoLog(this.program)}`);
     }
     const count = gl.getProgramParameter(this.program, gl.ACTIVE_UNIFORMS) as number;
     for (let i = 0; i < count; i++) {
@@ -969,7 +969,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
    * Rough GPU throughput, in texels shaded per millisecond.
    *
    * Timed around a batch of full-screen passes with a one-pixel readback at the
-   * end, because readPixels is what forces the queue to actually finish —
+   * end, because readPixels is what forces the queue to actually finish;
    * without it this would be timing command submission, not work. The first
    * batch is discarded: it pays for shader compilation and pipeline warm-up.
    *
@@ -987,11 +987,11 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     try {
       // The pressure solve is 40 of the ~70 passes in a step, so it is what
       // the estimate should be built on. A one-tap shader measures bandwidth
-      // this workload never sees and flatters a slow device badly — a software
+      // this workload never sees and flatters a slow device badly: a software
       // rasteriser came out fast enough for the top tier.
       const probeProgram = new Program(gl!, vertexShader, PRESSURE_SHADER);
       // Two targets, alternating. Rendering into the same texture being sampled
-      // is undefined behaviour, and drivers are entitled to short-circuit it —
+      // is undefined behaviour, and drivers are entitled to short-circuit it:
       // this probe reported an impossible three billion texels a second on a
       // software rasteriser until it ping-ponged properly.
       const probeA = createFBO(size, size, gl!.RGBA32F, gl!.RGBA, gl!.FLOAT, gl!.NEAREST);
@@ -1068,7 +1068,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
   // Full float, and linear because the force pass samples it on its own grid
   // rather than this one. Half precision costs about three decimal digits, and
   // the quantity being integrated is a small difference across the body's
-  // boundary ramp sitting on top of a much larger field — exactly the case
+  // boundary ramp sitting on top of a much larger field, exactly the case
   // where those digits are the signal.
   const pressure = createDoubleFBO(simGrid.width, simGrid.height, gl.R32F, gl.RED, gl.FLOAT, linear);
 
@@ -1127,7 +1127,7 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
   // (|sin| to the flow of 0.15) and edge-on with the pivot at its tip (0.95);
   // halfway out is already firmly in the second regime (0.87), and it keeps the
   // pivot visibly inside the shape rather than hanging it off the nose. Damping
-  // at 0.6 settles instead of pendulumming — lower it and the body flutters,
+  // at 0.6 settles instead of pendulumming; lower it and the body flutters,
   // which is equally real.
   const params: TunnelParams = {
     wind: 0.55,
@@ -1212,12 +1212,12 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     return (NUMERICAL_VISCOSITY_COEFF * windPhysical()) / simGrid.height;
   }
 
-  /** Reynolds number, on the body's own width, against the total viscosity —
+  /** Reynolds number, on the body's own width, against the total viscosity:
    *  what the slider adds plus what the grid imposes regardless. */
   function reynolds() {
     if (!shape) return 0;
     // All three in tunnel units, so the grid cancels out of the ratio as it
-    // should — except through the numerical viscosity, where it belongs.
+    // should, except through the numerical viscosity, where it belongs.
     return (
       (windPhysical() * 2 * shape.radius) /
       (viscosityPhysical() + numericalViscosity())
@@ -1364,8 +1364,8 @@ export function startTunnel(canvas: HTMLCanvasElement): TunnelHandle | null {
     blit(velocity.write);
     velocity.swap();
 
-    // A small fixed bleed. This is a linear drag, not viscosity — it damps every
-    // scale equally — so it is kept low and left alone; the diffusion step below
+    // A small fixed bleed. This is a linear drag, not viscosity: it damps every
+    // scale equally, so it is kept low and left alone; the diffusion step below
     // is what the slider moves.
     advect(velocity, velForward, velBack, VELOCITY_DISSIPATION, dt);
 

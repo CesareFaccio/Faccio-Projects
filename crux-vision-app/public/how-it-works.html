@@ -7,7 +7,7 @@
   <style>
     /* The System 7 skin, inlined: this page is copied verbatim out of public/,
        so it cannot share the app's bundled stylesheet. The fonts live in
-       public/fonts/ for the same reason — a hashed build asset would have no
+       public/fonts/ for the same reason: a hashed build asset would have no
        stable path to point at from here. */
     @font-face {
       font-family: "Pixelify Sans";
@@ -90,7 +90,7 @@
     .win__status a:hover { background: var(--ink); color: var(--paper); }
 
     h1 { margin: 0 0 14px; font-size: clamp(1.5rem, 4.5vw, 2.1rem); font-weight: 700; line-height: 1.08; }
-    .tagline { margin: 0; max-width: 64ch; font-size: 12.5px; }
+    .tagline { margin: 0 0 14px; max-width: 64ch; font-size: 12.5px; }
     /* Section heads are set as a label above a rule, the way a System 7 dialog
        divided its groups. */
     h2 {
@@ -104,6 +104,27 @@
     li { margin-bottom: 12px; }
     li::marker { color: var(--dimmer); }
     strong { font-weight: 700; }
+    h3 {
+      margin: 26px 0 10px; font-size: 13px; font-weight: 700;
+      font-family: var(--body);
+    }
+    /* The step numbers read as a labelled sequence rather than a bulleted
+       list, because the order is the whole point. */
+    .step-no {
+      display: inline-block; margin-right: 8px; padding: 1px 6px;
+      border: 1px solid var(--ink); background: var(--paper);
+      font-family: var(--ui); font-size: 11px;
+    }
+    table.data {
+      border-collapse: collapse; margin: 0 0 16px; font-size: 12px;
+      max-width: 68ch; width: 100%;
+    }
+    table.data th, table.data td {
+      border: 1px solid var(--ink); padding: 4px 8px; text-align: left;
+    }
+    table.data th { background: #e8e8e8; font-weight: 700; }
+    table.data td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .caption { font-size: 11.5px; color: var(--dim); margin: -8px 0 18px; max-width: 68ch; }
     .note {
       margin-top: 30px; padding: 12px 14px;
       border: 1px solid var(--ink); border-left-width: 4px;
@@ -140,26 +161,408 @@
       </div>
       <div class="win__body">
         <h1>How it works</h1>
-<p class="tagline">The short version: your video never leaves your device. Everything below — reading the video, finding your body, and doing the math — happens right there in your browser.</p>
+        <p class="tagline">
+          Crux Vision takes an ordinary video of a climb and works out what your body
+          was doing on it: where your weight was, which holds were carrying it, and how
+          hard each limb was working. This page explains every step of that, in plain
+          language, including the parts that are estimates rather than measurements.
+          Nothing here needs a physics or programming background.
+        </p>
+        <p class="tagline">
+          The one sentence summary: your video never leaves your device. Reading the
+          video, finding your body, and every calculation below all happen inside your
+          browser, on your own machine.
+        </p>
 
-    <h2>Finding your body in the video</h2>
-    <p>Crux Vision steps through your video about 60 times a second and, for each of those frames, runs a small AI model that looks for a person and marks 33 points on their body — wrists, elbows, shoulders, hips, knees, ankles, and more. This is the same kind of pose-tracking technology behind phone AR filters and fitness apps (it's called MediaPipe, built by Google) — Crux Vision just points it at your climbing footage, one frame at a time, and keeps the results for every frame.</p>
+        <h2>What you are looking at</h2>
+        <p>
+          The finished analysis is a single frame split down the middle, and it helps to
+          know which half is which before reading the rest of this page.
+        </p>
+        <ul>
+          <li>
+            <strong>The right half is your actual footage</strong>, with the tracked
+            skeleton drawn over it. On top of that you get a marker at each hold Crux
+            Vision found, and a marker for your centre of mass, which is your balance
+            point.
+          </li>
+          <li>
+            <strong>The left half is entirely drawn</strong>, not filmed. It is a
+            simplified body, with a circle at each hand and foot sized and coloured by
+            how much weight that limb is carrying, the limb segments themselves shaded
+            by how much force is running along them, and two gauges showing how fast
+            your balance point is moving and how hard it is accelerating.
+          </li>
+        </ul>
+        <p>
+          Green means lightly loaded, red means heavily loaded. The scale tops out at
+          half your body weight on a single point of contact, which is a lot, so a limb
+          only goes fully red when it is genuinely doing most of the work.
+        </p>
 
-    <h2>What gets measured, and how</h2>
-    <p>Once Crux Vision has those 33 points for every frame, it turns them into the numbers and markers you see on screen:</p>
-    <ul>
-      <li><strong>Hand and foot holds.</strong> Crux Vision watches your wrists and ankles. Whenever one of them stays almost perfectly still for about a second and a half, that's marked as an active hold. Brief wobbles are ignored, so a real grip doesn't get chopped into pieces by a bit of shake.</li>
-      <li><strong>Your center of mass (balance point).</strong> Rather than tracking one point on your body, Crux Vision splits you into segments — forearm, upper arm, thigh, shin, and so on — and gives each one a realistic share of your total body weight, based on published biomechanics research. Averaging all of those segments together gives your true center of gravity, not just your hips or your head.</li>
-      <li><strong>Weight on each hand and foot.</strong> Knowing your balance point and which holds are currently active, Crux Vision works out how your body weight must be shared across those holds for you to stay in balance — essentially the same physics a wall-mounted force sensor would measure, worked out from video instead.</li>
-      <li><strong>Elbow and knee angles.</strong> These come straight from the geometry of the tracked points — the angle formed at each joint by the body segments on either side of it.</li>
-      <li><strong>Speed and acceleration.</strong> Crux Vision tracks how your balance point moves from frame to frame to work out how fast you're moving and accelerating. The raw numbers are lightly smoothed first, so small per-frame tracking noise doesn't show up as a fake jolt of speed.</li>
-    </ul>
+        <h2>The pipeline, step by step</h2>
+        <p>
+          Everything runs in a fixed order, and each step only uses what the steps
+          before it produced. If you understand the order, the rest of this page is
+          mostly detail.
+        </p>
 
-    <h2>Where all of this actually runs</h2>
-    <p>Nowhere but your own device. There's no server involved, nothing gets uploaded, and there's no account or sign-in. The example on the front page is a pre-rendered video, so it costs you nothing to watch. The moment you analyse a climb of your own, your browser downloads the AI model once (about 43&nbsp;MB) — from then on, every step above (reading your video, running the AI model, doing all the math, and drawing the skeleton and stats on screen) runs using your own device's processor.</p>
-    <p>That's possible thanks to a browser technology called <strong>WebAssembly</strong>, which lets software originally built for serious number-crunching run at near-native speed directly inside a web page — no installing anything, no plugins. It's the same reason Crux Vision can be free to use: there's no server doing the work behind the scenes, so there's no compute cost per visitor. The trade-off is that a longer video takes longer to process on your device than it would on a powerful cloud server — a fair swap for keeping everything free and private.</p>
+        <h3><span class="step-no">1</span>Reading the video</h3>
+        <p>
+          The first thing Crux Vision has to work out is your video's frame rate, and
+          slightly annoyingly, browsers do not simply tell you. So it plays the first
+          moment of the file, watches when each new frame is actually delivered to the
+          screen, collects about twenty of those arrival times, and takes the middle
+          value of the gaps between them. Using the middle value rather than the average
+          matters: one slow frame while the browser is still warming up would drag an
+          average badly off, but it barely moves the middle of the list.
+        </p>
+        <p>
+          With the frame rate known, the video's length gives the number of frames, and
+          Crux Vision then steps through them one at a time, jumping to each frame's
+          exact moment and waiting for the browser to confirm it has landed there before
+          looking at the picture. That waiting is the honest reason a long video takes a
+          while. It is not the analysis being slow; it is the browser being asked to
+          seek accurately, thousands of times in a row.
+        </p>
+        <p>
+          The video has to be in a format your browser can actually decode, which in
+          practice means H.264, the codec inside most MP4 and MOV files. Newer iPhones
+          record in HEVC by default instead, which most browsers will not play, so if a
+          file is rejected the fix is usually in the phone's camera settings rather than
+          anything to do with Crux Vision.
+        </p>
 
-    <div class="note"><strong>A quick honest note:</strong> Crux Vision runs a compact AI model for free in your browser rather than lab-grade motion-capture equipment, so tracking is very good but not perfectly precise — small wobbles in the numbers are normal and don't mean anything's wrong.</div>
+        <h3><span class="step-no">2</span>Finding your body</h3>
+        <p>
+          Each frame goes to a pose model called MediaPipe, built by Google. It is the
+          same family of technology behind phone camera filters and fitness apps. It
+          looks for one person in the picture and returns 33 points on their body:
+          wrists, elbows, shoulders, hips, knees, ankles, heels, toes, and a cluster
+          around the face.
+        </p>
+        <p>
+          Two details of how it is configured matter for reading the results. First, it
+          is set to find exactly one person, so a spotter or a passer by in frame will
+          not confuse it into splitting its attention, though a crowded frame can still
+          make it pick the wrong person. Second, every one of the 33 points comes back
+          with a confidence score, and Crux Vision ignores any point it is less than 30%
+          sure about. A hand tucked behind your back is better left out of the
+          calculation than guessed at.
+        </p>
+        <p>
+          The model runs on your graphics card if your browser allows it, and falls back
+          to the main processor if not. The results are identical either way; the
+          graphics card is simply faster.
+        </p>
+        <p>
+          One thing Crux Vision deliberately does not do is smooth those points over
+          time before using them. Smoothing would make the skeleton look calmer, but it
+          would do so by inventing positions the model never reported, and every number
+          downstream would inherit that invention. The wobble you occasionally see is
+          the model's real uncertainty, shown honestly.
+        </p>
+
+        <h3><span class="step-no">3</span>Working out which holds you were on</h3>
+        <p>
+          Crux Vision never looks at the wall and never tries to recognise a hold as an
+          object. It works backwards from your body instead: if your wrist stops moving
+          and stays stopped, you are holding something.
+        </p>
+        <p>The test runs on each wrist and each ankle independently, in four stages.</p>
+        <ul>
+          <li>
+            <strong>Smooth the path.</strong> The position is averaged over a short
+            window, four frames by default, so a single jittery detection does not read
+            as movement.
+          </li>
+          <li>
+            <strong>Measure the speed.</strong> How far the point moved between one
+            frame and the next, as a fraction of the frame's size rather than in pixels,
+            so a 4K video and a 720p video of the same climb behave identically.
+          </li>
+          <li>
+            <strong>Decide what counts as still.</strong> Below 0.002 of the frame width
+            per frame, the point is treated as stationary. On a 1080p video that is
+            roughly two pixels of movement per frame, which is about the level of noise
+            a genuinely motionless hand produces.
+          </li>
+          <li>
+            <strong>Require it to last.</strong> A stationary stretch only becomes a
+            hold once it runs for 85 frames, which is about a second and a half on 60
+            frames per second footage and nearly three seconds on 30. Brief blips of
+            movement inside an otherwise still stretch, up to five frames, are ignored
+            rather than allowed to chop one long hold into three short ones.
+          </li>
+        </ul>
+        <p>
+          The hold's position on screen is then the average position of the hand or foot
+          across the whole time it was there, which is steadier than picking any single
+          frame.
+        </p>
+        <p>
+          All four of those numbers are exposed in the Analysis settings panel once a
+          video has been processed, and changing them re-runs the detection without
+          re-reading the video. That matters more than it sounds. A slow, static
+          boulder problem and a fast route on jugs genuinely want different thresholds,
+          and there is no single setting that is right for both. If Crux Vision is
+          missing holds you can see, lower the duration threshold; if it is inventing
+          holds mid move, raise it.
+        </p>
+        <p>
+          The honest limitation here is that stillness and holding are not quite the
+          same thing. A foot resting against the wall without weight on it looks exactly
+          like a foot standing on a hold, and a hand held still in space during a rest
+          will be counted too.
+        </p>
+
+        <h3><span class="step-no">4</span>Finding your balance point</h3>
+        <p>
+          Your centre of mass is the single point your whole body balances around. It is
+          not your hips and it is not your belly button; it moves as you move, and it is
+          frequently outside your body entirely, which is why a climber in a deep drop
+          knee can feel so stable in a position that looks impossible.
+        </p>
+        <p>
+          Crux Vision finds it by splitting you into fourteen pieces and giving each one
+          a share of your total weight, using a standard table from biomechanics
+          research (Winter, 2009), which is derived from cadaver and imaging studies and
+          is the same reference used in gait laboratories.
+        </p>
+        <table class="data">
+          <tr><th>Body part</th><th>Share of total body weight</th></tr>
+          <tr><td>Trunk (shoulders to hips)</td><td class="num">49.7%</td></tr>
+          <tr><td>Head</td><td class="num">8.1%</td></tr>
+          <tr><td>Each thigh</td><td class="num">10.0%</td></tr>
+          <tr><td>Each shin</td><td class="num">4.7%</td></tr>
+          <tr><td>Each upper arm</td><td class="num">2.8%</td></tr>
+          <tr><td>Each forearm</td><td class="num">1.6%</td></tr>
+          <tr><td>Each foot</td><td class="num">1.5%</td></tr>
+          <tr><td>Each hand</td><td class="num">0.6%</td></tr>
+        </table>
+        <p class="caption">
+          The trunk being about half of you is the single fact that does most of the
+          work here.
+        </p>
+        <p>
+          Each of those pieces has its own balance point, and it is not the middle. A
+          thigh is heavier at the hip end than at the knee, so its balance point sits
+          about 43% of the way down from the hip. Crux Vision places each piece's
+          balance point at the right fraction along it, then averages all fourteen
+          together, weighted by how heavy each piece is. That average is your centre of
+          mass.
+        </p>
+        <p>
+          If some pieces are not visible in a frame, they are simply left out and the
+          remaining ones are re-weighted. But if less than 30% of your body weight is
+          accounted for, the frame is abandoned rather than guessed at, and the balance
+          point marker disappears for that moment. You will see this happen when a
+          climber turns fully side on and half the body is hidden.
+        </p>
+
+        <h3><span class="step-no">5</span>Working out the weight on each hold</h3>
+        <p>
+          This is the step that produces the numbers most people came for, and it is
+          worth understanding what it is and is not doing.
+        </p>
+        <p>
+          The starting assumption is balance: at any given moment, the forces pushing
+          and pulling through your points of contact have to add up to exactly enough to
+          hold you against gravity. If they did not, you would be falling.
+        </p>
+        <p>
+          Each active contact can only push or pull along the line between that hold and
+          your centre of mass. A hand cannot pull you sideways through thin air; whatever
+          it does to you acts along that line. So Crux Vision draws a line from your
+          balance point to each active hold, and then asks: what combination of forces
+          along these particular lines adds up to supporting your body weight?
+        </p>
+        <p>
+          With two or more contacts there is usually more than one answer, because you
+          can always pull harder with one hand and push harder with the opposite foot
+          and end up in the same place. Crux Vision picks the answer with the least
+          total effort, which is the standard choice in this kind of problem and also
+          the most reasonable guess about what a climber actually does. Nobody
+          deliberately fights themselves on the wall.
+        </p>
+        <p>
+          What comes out is a share for each contact, as a percentage of your body
+          weight, and then that share resolved into how much of it is straight up.
+          Those two are not the same. A foot out on a wide smear takes a share of your
+          weight, but because it is pushing at an angle, the force running along your
+          leg is larger than the part of it that is actually holding you up. That is
+          the difference you feel between standing on something under you and standing
+          on something out to the side.
+        </p>
+        <p>
+          The things this step ignores are worth stating plainly. It knows nothing about
+          friction, so it cannot tell a positive jug from a sloper. It assumes you are in
+          balance, so during a dynamic move, when you are genuinely accelerating and not
+          in balance at all, the numbers are describing a situation that is not
+          happening. And it works entirely in the flat plane of the video, so anything
+          happening towards or away from the camera is invisible to it.
+        </p>
+
+        <h3><span class="step-no">6</span>Force along each limb</h3>
+        <p>
+          Once each hand and foot has a load, the force running along the limb segments
+          above it follows from geometry. A limb pointing straight down carries exactly
+          the load. A limb at an angle carries more, because only part of its force is
+          doing the holding and the rest is pushing sideways.
+        </p>
+        <p>
+          The steeper the angle, the worse this gets, and it gets worse quickly. A limb
+          at 45 degrees carries about 1.4 times the load. At 60 degrees it is 2 times.
+          At 75 degrees it is nearly 4. This is exactly why a wide stem or a long reach
+          feels disproportionately hard, and the eight limb segments Crux Vision tracks
+          (both forearms, both upper arms, both thighs, both shins) each get their own
+          figure.
+        </p>
+        <p>
+          When a limb goes fully horizontal the arithmetic runs away entirely, so Crux
+          Vision stops reporting a force for that segment rather than printing an
+          enormous number. A horizontal arm is not carrying infinite load in real life;
+          it is doing something the model does not describe.
+        </p>
+
+        <h3><span class="step-no">7</span>Elbow and knee angles</h3>
+        <p>
+          These are pure geometry and involve no assumptions at all: the angle between
+          the two body segments meeting at each joint, measured directly from the
+          tracked points. Crux Vision reports both elbows and both knees. A fully
+          straight limb reads 180 degrees.
+        </p>
+        <p>
+          They are worth watching alongside the force figures rather than on their own.
+          A heavily loaded arm at 90 degrees is a very different situation from a
+          heavily loaded arm that is nearly straight, even though the load number is
+          identical.
+        </p>
+
+        <h3><span class="step-no">8</span>Speed and acceleration</h3>
+        <p>
+          Speed is how far your balance point moved between frames, and acceleration is
+          how quickly that speed is changing. Both sound simple and both are numerically
+          nasty, because the tracked position carries a little noise, and each time you
+          take a difference you amplify that noise considerably. Doing it twice, naively,
+          gives you an acceleration trace that is almost entirely noise.
+        </p>
+        <p>
+          So before differentiating, Crux Vision fits a smooth curve through the balance
+          point's path: it takes a window of about 51 frames around each moment, fits a
+          gentle curve through them, and uses that curve's value instead of the raw
+          point. This is a standard technique (a Savitzky-Golay filter) and the important
+          property is that it follows genuine turns in the path while flattening the
+          frame to frame jitter. Acceleration gets the same treatment with a slightly
+          gentler curve, since it needs more help.
+        </p>
+        <p>
+          It is worth being clear that this is smoothing applied to a derived trajectory
+          in order to differentiate it, which is normal numerical practice. It is a
+          different thing from smoothing the raw tracked points, which Crux Vision
+          refuses to do for the reasons given in step 2.
+        </p>
+
+        <h2>Your body weight</h2>
+        <p>
+          Everything above is computed as a percentage of your body weight, not in
+          kilograms. The weight you enter on the front page is the number that turns
+          those percentages into kilograms, and that is its only job.
+        </p>
+        <p>
+          This is why you can change it at any time and the figures update instantly.
+          Nothing is re-detected and nothing is re-solved, because none of the physics
+          depends on it. If you leave it at the default the kilogram figures will be
+          wrong for you, but every percentage on screen will still be exactly right.
+        </p>
+
+        <h2>Where all of this actually runs</h2>
+        <p>
+          Nowhere but your own device. There is no server involved, nothing is uploaded,
+          and there is no account or sign in. The example on the front page is a
+          pre-rendered video, so it costs you nothing to watch. The moment you analyse a
+          climb of your own, your browser downloads the pose model once, about 43 MB, and
+          from then on every step above runs on your own machine's processor.
+        </p>
+        <p>
+          That is possible because of a browser technology called
+          <strong>WebAssembly</strong>, which lets software originally built for serious
+          number crunching run at close to full speed directly inside a web page, with
+          nothing to install and no plugins. It is also the reason Crux Vision is free:
+          there is no server doing the work behind the scenes, so there is no cost per
+          visitor. The trade off is that a long video takes longer on your laptop than it
+          would on a rack of cloud machines, which seems a fair swap for keeping it free
+          and keeping your footage yours.
+        </p>
+        <p>
+          The one thing that does leave your device, once, is the model file itself,
+          downloaded from this site like any other page asset. Your video is never part
+          of that.
+        </p>
+
+        <h2>Why there was a Python version first</h2>
+        <p>
+          Crux Vision started as a set of Python scripts, which worked, but required
+          anyone who wanted to use it to clone a repository, install its dependencies,
+          and understand enough of the code to point it at a file. That is a very short
+          list of people. Rewriting the whole pipeline to run in a browser removed all of
+          that: the thing you need in order to use it is now a link.
+        </p>
+        <p>
+          The calculations were ported deliberately closely, down to the same constants
+          and the same rounding, so the browser produces the same numbers as the original
+          scripts rather than merely similar ones.
+        </p>
+
+        <h2>What it cannot do</h2>
+        <p>
+          Worth knowing before you read too much into a number.
+        </p>
+        <ul>
+          <li>
+            <strong>It sees in two dimensions.</strong> One camera, one flat picture.
+            Movement towards or away from the lens is invisible, so a climber turning
+            side on to the wall produces less reliable numbers than one filmed square on.
+            Film from directly in front of the wall wherever you can.
+          </li>
+          <li>
+            <strong>It assumes you are in balance.</strong> The weight distribution is
+            solved from the condition of being held in place. During a dyno or any fast
+            move you are not being held in place, and those frames should be read as
+            roughly indicative at best.
+          </li>
+          <li>
+            <strong>It infers holds from stillness</strong>, not from looking at the
+            wall. A weightless foot placed against the wall counts; a hand that stays
+            still in the air counts. Equally, a hold you move on constantly may not
+            register at all.
+          </li>
+          <li>
+            <strong>It knows nothing about friction or hold shape.</strong> A crimp and a
+            jug at the same position with the same load produce identical numbers, even
+            though one of them is much harder.
+          </li>
+          <li>
+            <strong>The pose model is compact, not laboratory grade.</strong> It was
+            built to run free and fast on ordinary devices, not to match a motion capture
+            rig with reflective markers. Tracking is good; small wobbles in the numbers
+            are normal and do not mean anything is broken.
+          </li>
+        </ul>
+        <p>
+          Taken together, that makes Crux Vision a good tool for comparing, which is
+          mostly what it is for. Comparing two attempts at the same problem, or the same
+          move before and after a change in beta, tells you something real, because
+          whatever the errors are, they are much the same in both videos. Reading a
+          single number in isolation as though it came off a force plate does not.
+        </p>
+
+        <div class="note">
+          <strong>A quick honest note:</strong> Crux Vision runs a compact AI model free
+          in your browser rather than laboratory motion capture equipment, so the
+          tracking is very good but not perfectly precise. Treat the figures as a
+          well informed estimate, which is what they are.
+        </div>
       </div>
       <div class="win__status">
         <span>Crux Vision</span>
@@ -170,7 +573,7 @@
 
   <footer class="deskfoot">
     <span><a href="../">&larr; All projects</a></span>
-    <span>Runs entirely client-side &mdash; no video leaves your device.</span>
+    <span>Runs entirely client-side. No video leaves your device.</span>
   </footer>
 </body>
 </html>

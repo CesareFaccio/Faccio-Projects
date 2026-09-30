@@ -59,13 +59,13 @@ function applyShape(path: Vec2[]) {
   if (!tunnel) return;
   const shape = buildShape(path, aspect());
   if (!shape) {
-    tunnelStatus.textContent = "That did not enclose anything — draw a closed blob.";
+    tunnelStatus.textContent = "That did not enclose anything. Draw a closed blob.";
     return;
   }
   tunnel.setShape(shape);
   trace.clear();
   tunnelStatus.textContent = shape.rescaled
-    ? "Scaled down to fit the tunnel \u2014 a shape reaching the ends fights the inflow rather than the air."
+    ? "Scaled down to fit the tunnel. A shape reaching the ends fights the inflow rather than the air."
     : "Air runs bottom to top. The shape is pinned at the cross and free to turn.";
 }
 
@@ -117,7 +117,7 @@ function start(t: TunnelHandle) {
     drawing = true;
     path = [toTunnel(e)];
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    tunnelStatus.textContent = "Drawing — release to close the shape.";
+    tunnelStatus.textContent = "Drawing. Release to close the shape.";
     e.preventDefault();
   });
 

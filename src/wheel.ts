@@ -2,7 +2,7 @@
 // The projects carousel: cards ride the rim of a very large, mostly off-screen
 // circle, so only the shallow top arc is visible. Rotating the ring carries
 // them along that arc, and because each card rotates *with* the ring rather
-// than counter-rotating, it tilts as it travels — which is what makes the
+// than counter-rotating, it tilts as it travels, which is what makes the
 // thing read as a wheel rather than a flat row.
 //
 // The wheel is continuous: slots are laid out all the way round the circle and
@@ -38,7 +38,7 @@ function geometryFor(width: number, uniqueCount: number): Geometry {
   const radius = Math.max(1500, Math.min(2800, width * 1.7));
   const minSpacing = width < 1000 ? 250 : 300;
   // Widen the spacing on large screens if we would otherwise fit more cards
-  // across the viewport than we have distinct projects — without this the
+  // across the viewport than we have distinct projects. Without this the
   // wheel wraps far enough to show the same project at both edges.
   const spacing = Math.max(minSpacing, width / Math.max(uniqueCount - 0.6, 1));
   const circumference = 2 * Math.PI * radius;
@@ -71,7 +71,7 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
   let lastPointerX = 0;
   let lastMoveTime = 0;
   let dragDistance = 0;
-  // Pointer capture is taken only once a drag is really under way — see
+  // Pointer capture is taken only once a drag is really under way. See
   // onPointerMove. Capturing on pointerdown retargets the whole compatibility
   // mouse sequence to the viewport, so the click lands on the wheel instead of
   // the card and a card link never opens.
@@ -85,7 +85,7 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
   function buildSlots() {
     ring.textContent = "";
     slots = [];
-    // In flat mode only the distinct projects are listed — repeating them in a
+    // In flat mode only the distinct projects are listed: repeating them in a
     // plain scrolling row would just look like a mistake.
     const count = flat ? uniqueCount : geo.slotsAround;
     for (let i = 0; i < count; i++) {
@@ -223,7 +223,7 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     dragDistance += Math.abs(dx);
     // Take the capture as soon as this is unmistakably a drag rather than a
     // click, so the pointer can leave the viewport mid-drag without the wheel
-    // losing track of it — but a plain click never captures, and so still
+    // losing track of it, but a plain click never captures, and so still
     // reaches the card underneath.
     if (!captured && dragDistance > 4 && pointerId !== null) {
       viewport.setPointerCapture(pointerId);
@@ -329,7 +329,7 @@ export function createWheel(viewport: HTMLElement, ring: HTMLElement, options: W
     el.style.transform =
       `translate(${e.clientX - rect.left}px, ${e.clientY - rect.top}px) translate(-50%, -50%)`;
     // Over a card, the pill gives way to the ordinary pointer: there the card
-    // is the target, not the wheel. During a drag it stays up regardless —
+    // is the target, not the wheel. During a drag it stays up regardless:
     // pointer capture retargets events to the viewport anyway, but being
     // explicit stops the pill flickering as cards pass under the cursor.
     const overCard = !dragging && !!(e.target as HTMLElement | null)?.closest?.(".card");

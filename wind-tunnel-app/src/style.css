@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   Wind Tunnel — the same System 7 skin as the rest of the site.
+   Wind Tunnel: the same System 7 skin as the rest of the site.
 
    Kept as its own stylesheet because this is a separate Vite build; the tokens
    and chrome below are deliberately identical to the other apps', so a change
@@ -188,6 +188,11 @@ a.menubar__item:hover { background: var(--ink); color: var(--paper); }
 }
 .win__toolbar { border-bottom: 1px solid var(--ink); flex-wrap: wrap; }
 .win__status { border-top: 1px solid var(--ink); }
+/* Status-bar links are underlined rather than coloured, and invert on hover,
+   which is how a System 7 control showed it was live. */
+.win__status a { color: inherit; text-decoration: none; border-bottom: 1px solid currentColor; }
+.win__status a:hover { background: var(--ink); color: var(--paper); }
+.win__status-right { margin-left: auto; white-space: nowrap; }
 .toolbar__hint { color: var(--dim); }
 .toolbar__buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 

@@ -1,7 +1,7 @@
 // shape.ts
 // Turns the path someone drags across the tunnel into something the solver can
 // use: a coverage mask in the body's own frame, plus the numbers the rotation
-// needs — where the area centroid is, how much area there is, how hard it is to
+// needs: where the area centroid is, how much area there is, how hard it is to
 // spin, and which way its long axis runs.
 //
 // Everything here is measured from the RASTERISED mask rather than from the
@@ -55,7 +55,7 @@ const MIN_AREA = 0.00035;
  * The furthest any part of the body may sit from the pivot, in tunnel units.
  *
  * The pivot is pinned at mid-height, so this keeps the body clear of both ends
- * of the tunnel — the prescribed inflow in the bottom 0.05, and the open
+ * of the tunnel: the prescribed inflow in the bottom 0.05, and the open
  * outflow at the top, where the pressure is pinned to zero. A body reaching
  * into either fights a boundary condition rather than the flow, and the
  * pressure solve answers with very large local velocities: an ellipse drawn
@@ -169,7 +169,7 @@ function buildShapeInner(path: Vec2[], aspect: number, mayRescale: boolean): Sha
     return buildShapeInner(shrunk, aspect, false);
   }
 
-  // The long axis is the principal direction of greatest spread — the larger
+  // The long axis is the principal direction of greatest spread: the larger
   // eigenvector of the covariance of the covered pixels.
   const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
   const axis: Vec2 = { x: Math.cos(theta), y: Math.sin(theta) };
@@ -227,7 +227,7 @@ export function presetPath(name: "teardrop" | "plate" | "disc", aspect: number):
   }
 
   // Both of the others are drawn at a slant. Square to the flow is an
-  // equilibrium — for some shapes an unstable one — and a body started exactly
+  // equilibrium (for some shapes an unstable one) and a body started exactly
   // on it has no reason to leave.
   const tilt = name === "plate" ? 0.5 : 1.05;
   const c = Math.cos(tilt);

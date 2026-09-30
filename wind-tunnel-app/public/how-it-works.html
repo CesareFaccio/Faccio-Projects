@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How the Wind Tunnel Works</title>
+  <style>
+    /* The System 7 skin, inlined: this page is copied verbatim out of public/,
+       so it cannot share the app's bundled stylesheet. The fonts live in
+       public/fonts/ for the same reason: a hashed build asset would have no
+       stable path to point at from here. */
+    @font-face {
+      font-family: "Pixelify Sans";
+      src: url("./fonts/pixelify-sans-400.woff2") format("woff2");
+      font-weight: 400; font-display: swap;
+    }
+    @font-face {
+      font-family: "Pixelify Sans";
+      src: url("./fonts/pixelify-sans-700.woff2") format("woff2");
+      font-weight: 700; font-display: swap;
+    }
+    :root {
+      --ink: #000; --paper: #fff; --dim: #6b6b6b; --dimmer: #a8a8a8;
+      --ui: "Pixelify Sans", Chicago, "ChicagoFLF", Geneva, Verdana, sans-serif;
+      --body: Geneva, Verdana, Tahoma, "DejaVu Sans", sans-serif;
+      --shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--ink);
+      font-family: var(--body); font-size: 13px; line-height: 1.7;
+      background-color: #9a9a9a;
+      background-image: repeating-conic-gradient(#8a8a8a 0% 25%, #b6b6b6 0% 50%);
+      background-size: 4px 4px;
+    }
+    a { color: inherit; }
+    .menubar, .win__bar, .win__status, .deskfoot, h1, h2 {
+      font-family: var(--ui); -webkit-font-smoothing: none; font-smooth: never;
+    }
+    .menubar {
+      position: sticky; top: 0; z-index: 500; height: 24px;
+      display: flex; align-items: stretch; padding: 0 4px;
+      background: var(--paper); border-bottom: 1px solid var(--ink);
+      font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden;
+    }
+    .menubar__item {
+      display: flex; align-items: center; padding: 0 10px;
+      text-decoration: none; color: var(--ink);
+    }
+    a.menubar__item:hover { background: var(--ink); color: var(--paper); }
+    .menubar__item.is-disabled { color: var(--dimmer); }
+    .menubar__gap { flex: 1; }
+    .menubar__mark {
+      align-self: center; width: 11px; height: 11px; margin: 0 10px 0 6px;
+      background: var(--ink);
+      clip-path: polygon(50% 0, 62% 38%, 100% 38%, 70% 62%, 82% 100%, 50% 76%, 18% 100%, 30% 62%, 0 38%, 38% 38%);
+    }
+    .desktop { max-width: 820px; margin: 0 auto; padding: clamp(14px, 2.5vw, 34px); }
+    .win {
+      border: 1px solid var(--ink); background: var(--paper); box-shadow: var(--shadow);
+    }
+    .win__bar {
+      display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 5px;
+      border-bottom: 1px solid var(--ink);
+      background: repeating-linear-gradient(to bottom, var(--ink) 0 1px, var(--paper) 1px 2px);
+      user-select: none;
+    }
+    .win__close, .win__zoom {
+      flex: 0 0 auto; width: 11px; height: 11px;
+      border: 1px solid var(--ink); background: var(--paper);
+    }
+    .win__zoom { position: relative; }
+    .win__zoom::after {
+      content: ""; position: absolute; inset: 0 auto auto 0; width: 6px; height: 6px;
+      border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+    }
+    .win__title { flex: 1; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+    .win__title > span {
+      max-width: 100%; padding: 0 10px; background: var(--paper);
+      font-size: 12px; font-weight: 700; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .win__body { padding: clamp(18px, 3vw, 30px); }
+    .win__status {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 4px 9px; border-top: 1px solid var(--ink);
+      font-size: 11px; min-height: 22px;
+    }
+    .win__status a { text-decoration: none; border-bottom: 1px solid currentColor; }
+    .win__status a:hover { background: var(--ink); color: var(--paper); }
+
+    h1 { margin: 0 0 14px; font-size: clamp(1.5rem, 4.5vw, 2.1rem); font-weight: 700; line-height: 1.08; }
+    .tagline { margin: 0 0 14px; max-width: 64ch; font-size: 12.5px; }
+    /* Section heads are set as a label above a rule, the way a System 7 dialog
+       divided its groups. */
+    h2 {
+      margin: clamp(30px, 5vh, 44px) 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--ink);
+      font-size: 12px; font-weight: 700;
+    }
+    p { margin: 0 0 14px; max-width: 68ch; }
+    ul { margin: 0; padding-left: 20px; max-width: 68ch; }
+    li { margin-bottom: 12px; }
+    li::marker { color: var(--dimmer); }
+    strong { font-weight: 700; }
+    h3 {
+      margin: 26px 0 10px; font-size: 13px; font-weight: 700;
+      font-family: var(--body);
+    }
+    /* The step numbers read as a labelled sequence rather than a bulleted
+       list, because the order is the whole point. */
+    .step-no {
+      display: inline-block; margin-right: 8px; padding: 1px 6px;
+      border: 1px solid var(--ink); background: var(--paper);
+      font-family: var(--ui); font-size: 11px;
+    }
+    table.data {
+      border-collapse: collapse; margin: 0 0 16px; font-size: 12px;
+      max-width: 68ch; width: 100%;
+    }
+    table.data th, table.data td {
+      border: 1px solid var(--ink); padding: 4px 8px; text-align: left;
+    }
+    table.data th { background: #e8e8e8; font-weight: 700; }
+    table.data td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .caption { font-size: 11.5px; color: var(--dim); margin: -8px 0 18px; max-width: 68ch; }
+    .note {
+      margin-top: 30px; padding: 12px 14px;
+      border: 1px solid var(--ink); border-left-width: 4px;
+      background: #f2f2f2; font-size: 12px; max-width: 68ch;
+    }
+    .deskfoot {
+      display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+      max-width: 820px; margin: 0 auto;
+      padding: 0 clamp(14px, 2.5vw, 34px) 26px;
+      font-size: 10.5px; color: #3c3c3c;
+    }
+    .deskfoot a { text-decoration: none; }
+    .deskfoot a:hover { background: var(--ink); color: var(--paper); }
+  </style>
+</head>
+<body>
+  <div class="menubar">
+    <a class="menubar__mark" href="../" aria-label="Back to projects"></a>
+    <span class="menubar__item is-disabled">File</span>
+    <span class="menubar__item is-disabled">Edit</span>
+    <span class="menubar__item is-disabled">Special</span>
+    <span class="menubar__gap"></span>
+    <a class="menubar__item" href="../">Projects</a>
+    <a class="menubar__item" href="./">Wind Tunnel</a>
+    <a class="menubar__item" href="https://github.com/CesareFaccio" target="_blank" rel="noopener">GitHub</a>
+  </div>
+
+  <main class="desktop">
+    <div class="win">
+      <div class="win__bar">
+        <i class="win__close" aria-hidden="true"></i>
+        <span class="win__title"><span>How the Wind Tunnel Works</span></span>
+        <i class="win__zoom" aria-hidden="true"></i>
+      </div>
+      <div class="win__body">
+        <h1>How it works</h1>
+        <p class="tagline">
+          Draw any shape, and the Wind Tunnel blows air past it and lets it turn until it
+          finds an angle it is happy sitting at. The air is not an animation: it is a
+          fluid simulation, solving the real equations for how air moves, recomputed from
+          scratch sixty times a second on your own graphics card. This page explains what
+          it is doing, why the result is often the opposite of what people expect, and
+          where the whole thing stops being trustworthy.
+        </p>
+
+        <h2>What you are looking at</h2>
+        <p>
+          Air enters along the bottom of the tunnel and leaves at the top. The dotted
+          texture drifting upwards is smoke, injected at the bottom edge purely so you
+          can see the flow; it has no weight and does not push on anything. It is a
+          marker, not a participant.
+        </p>
+        <p>
+          Your shape sits in the middle, pinned at the small cross. It cannot drift, and
+          it cannot be blown downstream. It can only rotate about that one point. That
+          restriction is deliberate: a shape free to move as well as turn would simply be
+          swept out of the tunnel in a second, and the interesting question is not whether
+          air pushes things along, which everyone already knows, but which way round a
+          shape chooses to sit.
+        </p>
+        <p>
+          The second window plots the twisting force, the torque, against the angle the
+          shape is currently at. Where that curve crosses zero, the air is not twisting
+          the shape at all, which means the shape can rest there. Those crossings are the
+          equilibrium angles, and they are the actual answer to the question the tunnel is
+          asking.
+        </p>
+
+        <h2>Using it</h2>
+        <ul>
+          <li>
+            <strong>Drag inside the tunnel to draw.</strong> Whatever you draw is closed
+            into a solid automatically; you do not have to join the ends up yourself.
+          </li>
+          <li>
+            <strong>Teardrop and Plate</strong> load two shapes worth knowing: a classic
+            streamlined section, and a flat plate, which is the simplest shape that shows
+            the behaviour described below.
+          </li>
+          <li>
+            <strong>Reset air</strong> clears the flow and starts it again without
+            touching your shape. Useful after a big slider change, when the old flow
+            pattern is still working itself out.
+          </li>
+          <li>
+            <strong>Pause</strong> freezes everything, which is the only way to actually
+            look at a wake rather than watch it go past.
+          </li>
+        </ul>
+        <p>
+          Drawing something much bigger than the tunnel scales it down to fit rather than
+          rejecting it. A shape reaching the ends of the tunnel is fighting the inflow and
+          outflow conditions rather than the air, and the results stop meaning anything.
+        </p>
+
+        <h2>The result that surprises people</h2>
+        <p>
+          Pin a shape at its centre, and it settles <strong>across</strong> the flow,
+          broadside on, presenting the largest possible area to the air. This is almost
+          always the opposite of what people predict, because it seems to contradict the
+          intuition that things line up with the wind.
+        </p>
+        <p>
+          But it is correct, and you have seen it many times. Drop a playing card and it
+          lands flat, fluttering, rather than knifing down edge first. Drop a leaf and the
+          same thing happens. Neither one turns itself into an arrow.
+        </p>
+        <p>
+          The reason is where the air's push effectively acts. When a shape sits at a
+          slight angle to the flow, the push does not act at the middle of the shape; it
+          acts somewhere ahead of the middle, towards the upstream end. Call that the
+          centre of pressure. If the shape is pinned behind that point, which is what
+          happens when you pin it at its centre, then any small tilt produces a twist that
+          increases the tilt. It runs away, and it keeps running away until the shape is
+          fully broadside and the situation is symmetric again. Broadside is where it
+          stops.
+        </p>
+        <p>
+          Now move the <strong>Balance point</strong> slider towards the nose. You are
+          pinning the shape <em>ahead</em> of the centre of pressure, and the same
+          arithmetic reverses: a small tilt now produces a twist that reduces the tilt. It
+          self corrects, and the shape lines up along the flow.
+        </p>
+        <p>
+          That is precisely how a dart, an arrow and a weathervane work. None of them is
+          shaped to point into the wind by magic; all of them are held well ahead of where
+          the air pushes, whether by a heavy tip, a mounted pivot, or the fins pushing the
+          effective point of action backwards. Move the pivot and you change the answer,
+          not just the strength of it. The slider is showing you the whole of aerodynamic
+          stability in one control.
+        </p>
+
+        <h2>How the air is simulated</h2>
+        <p>
+          The tunnel is divided into a grid of small square cells, and each cell holds one
+          number for how fast the air in it is moving and in what direction. Every frame,
+          the whole grid is updated in four stages. This is the standard structure of a
+          fluid solver, and it is worth knowing because each stage corresponds to
+          something physical.
+        </p>
+        <ul>
+          <li>
+            <strong>Push air in at the bottom.</strong> The cells along the inlet are
+            simply told what their velocity is, and smoke is injected there at the same
+            time.
+          </li>
+          <li>
+            <strong>Carry everything along with the flow.</strong> Air carries its own
+            motion with it, and it carries the smoke too. This stage is called advection
+            and it is described in more detail below, because it turned out to matter
+            enormously.
+          </li>
+          <li>
+            <strong>Let momentum spread sideways.</strong> Fast moving air drags slower
+            air next to it along. That is viscosity, and it is what the Turbulence slider
+            controls.
+          </li>
+          <li>
+            <strong>Make it add up.</strong> Air cannot pile up in one place or vanish
+            from another. After the previous stages it generally does not obey that, so
+            the solver works out a pressure field whose push exactly cancels the piling
+            up, and subtracts it. This is the expensive stage: it takes forty passes over
+            the whole grid, and it is where most of the frame's work goes.
+          </li>
+        </ul>
+        <p>
+          That last stage is also where pressure comes from. It is not an extra ingredient
+          that gets added; it is whatever it has to be to stop air accumulating. Every
+          force the shape feels is a consequence of it.
+        </p>
+
+        <h3>Why advection needed fixing</h3>
+        <p>
+          The simple way to carry air along is to look backwards: for each cell, work out
+          where the air currently in it must have come from a moment ago, and go and fetch
+          the value from there. That works, never explodes, and is what most browser fluid
+          demos do.
+        </p>
+        <p>
+          It also blurs, every single step. The place you look back to almost never lands
+          exactly on a cell, so the value gets mixed from the neighbouring cells, and
+          mixing is smoothing. Sixty times a second, that smoothing behaves exactly like a
+          thick, syrupy viscosity that nobody asked for. It was large enough to swamp
+          anything the Turbulence slider did, which is why an early version of this tunnel
+          could not produce a proper turbulent wake at any setting: it was being held
+          smooth by its own arithmetic.
+        </p>
+        <p>
+          The fix is to measure the error rather than try to avoid it. Carry the field
+          forwards one step, then carry the result backwards one step. With perfect
+          arithmetic you would land exactly where you started, so however far off you end
+          up is the error, and half of it can be subtracted back out. The result is
+          clamped so the correction can never invent a value that existed nowhere nearby,
+          which is what keeps it stable. It costs two extra passes over the grid, and it
+          is the single change that made the wake real.
+        </p>
+
+        <h2>The shape in the flow</h2>
+        <p>
+          The shape is not a hole cut in the grid. The grid covers the whole tunnel,
+          including the inside of the shape, and the solver simply insists that the air
+          inside the shape moves exactly as the solid does. Since the shape can rotate,
+          that means the air inside it is driven to match a rigid body spinning at the
+          shape's current rate, rather than being driven to a standstill.
+        </p>
+        <p>
+          That distinction sounds pedantic and is not. Forcing the interior to stand still
+          would mean the surface never resists the shape's own rotation, and with light
+          damping the shape would spin up and keep spinning forever, driven by nothing.
+          Matching the rotation instead is what makes a spinning shape feel the air fight
+          it, which is exactly right: spinning something in air is harder than spinning it
+          in a vacuum.
+        </p>
+
+        <h3>Measuring the twist</h3>
+        <p>
+          The force on the shape comes from the pressure pushing inwards all over its
+          surface. Adding that up around the outline, weighted by distance from the pivot,
+          gives the torque, and that number is what drives the rotation.
+        </p>
+        <p>
+          You may notice that the tunnel reports torque and never reports drag. That is
+          not an oversight; drag turned out to be genuinely unmeasurable here, and the
+          reason is instructive. Driving air through a tunnel requires a pressure
+          difference from one end to the other, and that background gradient pushes on
+          everything in the tunnel, including the shape. Its contribution to the force is
+          not small and is very hard to separate from the force the shape's own geometry
+          produces. Three different approaches to subtracting it all failed the same
+          sanity check: a circular disc, which by symmetry must produce zero of everything
+          interesting, kept reporting a drag that varied with angle.
+        </p>
+        <p>
+          Torque does not have this problem, and the reason is neat. A uniform push across
+          the whole shape acts, in effect, at its centre, so it produces no twist about
+          that point at all. The background gradient drops out of the torque completely
+          while corrupting the drag badly. So the tunnel reports the quantity it can
+          actually measure honestly, and stays quiet about the one it cannot. The same
+          disc test now returns essentially zero torque at every angle, which is the
+          correct answer.
+        </p>
+
+        <h2>The sliders</h2>
+        <h3>Wind speed</h3>
+        <p>
+          How fast air enters the tunnel. It has a firm upper limit, and the limit is set
+          by arithmetic rather than by taste. The solver moves air one step at a time, and
+          if the air crosses more than about two cells in a single step, the scheme stops
+          resolving the flow and starts smearing it, and the pressure field goes with it.
+          Past that point the numbers are confidently wrong, which is worse than a shorter
+          slider. At the top of the range the simulation quietly splits each frame into
+          several smaller steps to stay inside that limit.
+        </p>
+
+        <h3>Turbulence</h3>
+        <p>
+          This is the air's thickness, its viscosity, running from syrup on the left to
+          something close to thin air on the right. What actually changes is the Reynolds
+          number, the ratio between how hard the flow is being pushed and how strongly the
+          air resists being sheared.
+        </p>
+        <p>
+          At the thick end, the flow stays glued to the surface of the shape and the wake
+          closes quietly behind it. As the air thins, the flow can no longer follow the
+          shape's curve all the way round, separates from the surface, and the wake
+          broadens. Thinner still and the wake stops being steady: vortices peel off
+          alternate sides in a regular rhythm, each one giving the shape a small kick as it
+          goes. That is what buffets the shape instead of letting it sit still, and it is
+          the same mechanism that makes a flag flap and a cable hum in the wind.
+        </p>
+        <p>
+          The slider cannot reach zero viscosity, and this is a real limit rather than a
+          missing feature. A grid of finite cells cannot represent detail smaller than one
+          cell. With nothing to smooth out the small scales, the flow keeps rolling
+          vorticity up into ever finer structures until they are finer than the cells, at
+          which point the simulation is no longer computing anything meaningful and the
+          local speeds run away. So the tunnel enforces a floor: the viscosity is never
+          allowed to drop below what the current grid can actually carry at the current
+          wind speed. That is also why a faster machine sees more turbulence, as explained
+          next, rather than just a sharper picture.
+        </p>
+
+        <h3>Rotational inertia</h3>
+        <p>
+          How reluctant the shape is to change how fast it is spinning. Heavy on the
+          right: it responds slowly, overshoots its resting angle and swings past it
+          before coming back. Light on the left: it snaps to the answer almost
+          immediately, which is useful when you just want to know where a shape settles
+          rather than watch it get there.
+        </p>
+
+        <h3>Angular damping</h3>
+        <p>
+          How much the rotation is bled away, as a stand in for pivot friction. Low
+          damping with high inertia gives a shape that oscillates about its resting angle
+          for a long time, which is worth seeing at least once: the oscillation is the
+          shape genuinely being restored towards equilibrium and repeatedly overshooting
+          it. High damping settles quickly and quietly.
+        </p>
+
+        <h3>Balance point</h3>
+        <p>
+          Where along the shape's own long axis the pivot sits. This is the control that
+          changes the answer rather than the journey, for the reasons in the section
+          above. Centre for broadside, towards the nose for weathervaning.
+        </p>
+
+        <h2>It adapts to your device</h2>
+        <p>
+          Resolution is the one thing that genuinely buys turbulence, because the
+          smoothing baked into the arithmetic shrinks as the cells do, so a finer grid can
+          honestly reach a higher Reynolds number. It is also expensive: the cell count
+          goes up with the square, and a finer grid needs shorter time steps as well, so
+          the top setting is roughly five times the work of the bottom one.
+        </p>
+        <p>
+          So when the page opens, it briefly measures how fast your graphics card actually
+          shades pixels by running a small burst of work and timing it, then picks the
+          finest grid that should still fit inside a frame's budget. A laptop with
+          integrated graphics gets the coarse grid and a smooth sixty frames a second; a
+          desktop card or an Apple Silicon machine gets the fine one, and a visibly more
+          detailed wake.
+        </p>
+        <p>
+          Importantly, the physics does not change with the grid. Every quantity in the
+          solver is expressed in terms of the tunnel itself rather than in cells, and
+          converted at the point of use, so a wind speed of 0.7 means the same flow whether
+          it is being resolved on 180 cells or 320. A shape settles at the same angle on
+          both; the faster machine simply sees more of the fine structure on the way there.
+        </p>
+
+        <h2>The trace window</h2>
+        <p>
+          The plot records the twist the air is applying against the angle the shape is
+          at, building up as the shape moves. The dashed line is zero torque.
+        </p>
+        <p>
+          Every crossing of that line is an angle where the air is not twisting the shape,
+          so the shape could rest there. But only half of them are places it will actually
+          stay. Where the curve crosses from positive to negative, a small nudge produces a
+          twist pushing back towards the crossing, so the shape returns: that is a stable
+          equilibrium. Where it crosses the other way, a small nudge produces a twist
+          pushing further away, so the shape leaves: unstable. A shape pinned at its centre
+          typically has stable crossings at broadside and unstable ones in line with the
+          flow, and moving the balance point towards the nose swaps them over. You can
+          watch the swap happen on the plot as you drag the slider.
+        </p>
+
+        <h2>What it is not</h2>
+        <ul>
+          <li>
+            <strong>It is two dimensional.</strong> Real wakes are three dimensional, and
+            real turbulence has a way of stretching vortices that simply does not exist in
+            a flat world. Two dimensional turbulence behaves qualitatively differently from
+            the real thing, tending to pool energy into large structures rather than
+            cascading it down to small ones.
+          </li>
+          <li>
+            <strong>The numbers are not in real units.</strong> There are no newtons and
+            no metres per second here. Everything is measured in tunnel widths and
+            simulation seconds. Ratios and comparisons between shapes mean something;
+            absolute values do not.
+          </li>
+          <li>
+            <strong>The air cannot be compressed</strong> and there is no heat and no
+            sound. That is a good assumption for anything well below the speed of sound and
+            a useless one above it.
+          </li>
+          <li>
+            <strong>The Reynolds numbers are far below reality.</strong> A real wing
+            operates in air thousands of times thinner, relatively speaking, than anything
+            this grid can resolve. What you are seeing is the right mechanism at the wrong
+            scale.
+          </li>
+          <li>
+            <strong>It is not a design tool.</strong> It will tell you why a dart has its
+            weight at the front, and it will not tell you anything reliable about a wing
+            section you are actually planning to build.
+          </li>
+        </ul>
+
+        <div class="note">
+          <strong>Worth trying:</strong> load the Plate, leave the balance point at the
+          centre, and watch it turn broadside. Then drag the balance point towards the
+          nose without changing anything else. The same shape in the same air picks the
+          opposite answer, which is the single most useful thing in this simulation.
+        </div>
+      </div>
+      <div class="win__status">
+        <span>Wind Tunnel</span>
+        <span><a href="./">Back to the Wind Tunnel</a></span>
+      </div>
+    </div>
+  </main>
+
+  <footer class="deskfoot">
+    <span><a href="../">&larr; All projects</a></span>
+    <span>Runs entirely client-side.</span>
+  </footer>
+</body>
+</html>
